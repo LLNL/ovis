@@ -703,7 +703,6 @@ util/sample_init_scripts/genders/sysv/Makefile
 util/sample_init_scripts/genders/sysv/etc/Makefile
 util/sample_init_scripts/genders/sysv/etc/init.d/Makefile
 util/sample_init_scripts/genders/examples/Makefile
-lib/ovis-lib.spec
 lib/Doxyfile
 lib/Makefile
 lib/src/Makefile
@@ -789,7 +788,6 @@ ldms/python/cmds/Makefile
 ldms/Doxyfile
 ldms/scripts/ldmsd
 ldms/scripts/envldms.sh
-ldms/ldms.spec
 ldms/man/Makefile
 ] )
 
