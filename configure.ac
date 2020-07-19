@@ -798,6 +798,7 @@ ldms/Doxyfile
 ldms/scripts/ldmsd
 ldms/scripts/envldms.sh
 ldms/man/Makefile
+rpm/ovis-ldms-toss.spec
 ] )
 
 AC_CONFIG_FILES([
