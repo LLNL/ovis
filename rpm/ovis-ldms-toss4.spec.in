@@ -17,6 +17,7 @@ Requires: boost-regex boost-program-options
 Requires: genders
 Requires: libibmad libibumad
 Requires: librdmacm libibverbs
+Requires: munge
 
 BuildRequires: gettext-devel gcc glib2-devel
 BuildRequires: openssl-devel
@@ -31,6 +32,7 @@ BuildRequires: genders
 BuildRequires: systemd
 BuildRequires: bison
 BuildRequires: flex
+BuildRequires: munge-devel
 Obsoletes: ovis
 Obsoletes: ovis-initscripts-base
 Obsoletes: ovis-initscripts-systemd
@@ -50,6 +52,7 @@ export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
     CC=gcc CXX=g++ \
     --disable-rpath \
     --disable-static \
+    --enable-munge \
     --enable-ssl \
     --enable-rdma \
     --disable-mmap \
