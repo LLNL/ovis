@@ -104,7 +104,6 @@ export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
 %if %{with papi}
     --enable-papi \
     --with-libpapi-prefix=/usr/papi600 \
-    --enable-pfm \
     --with-libpfm-prefix=/usr/papi600 \
 %endif
     --disable-hello_stream
