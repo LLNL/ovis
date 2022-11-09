@@ -227,20 +227,6 @@ package.
 %{_includedir}/*/*/*.h
 %{_includedir}/ovis-ldms-config.h
 
-%package test
-Summary: LDMS test package
-Group: System Environment/Libraries
-Requires: %{name} = %{version}
-#Obsoletes: ovis-test
-%description test
-This is a collection of test scripts for (LDMS).
-They also serve as examples, but are not usually of interest
-on compute nodes in large clusters.
-
-%files test
-%defattr(-,root,root)
-%{_bindir}/ldms-py*sh
-
 %package doc
 Summary: Documentation files for %{name}
 Group: System Environment/Libraries
@@ -299,17 +285,16 @@ LDMS sampler plugin that supports AMD GPUs
 %{_mandir}/*/*_rdc_*
 %endif
 
+%package test
+Summary: LDMS test package
+Group: System Environment/Libraries
+Requires: %{name} = %{version}
+%description test
+This is a collection of test scripts for (LDMS).
+%files test
+%defattr(-,root,root)
+%{_bindir}/ldms-py*sh
 %if %{with tests}
-%package tests
-Summary: LDMS tests
-Group: System Environment/Base
-# Because of the way we handle /opt (where rocm is installed)
-# in TOSS, we can not have an explicit Requires on it here.
-#Requires: rocm-%{rocm_version}
-%description tests
-Tests for the LDMS
-%files tests
-%defattr(-,root,root,-)
 %{_bindir}/pll-ldms-static-test.sh
 %{_pkgdocdir}/examples/slurm-test
 %{_mandir}/*/pll-ldms-static-test*
