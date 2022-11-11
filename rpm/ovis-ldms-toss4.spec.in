@@ -138,7 +138,7 @@ export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
     %{?with_dcgm:--with-dcgm}%{!?with_dcgm:--without-dcgm} \
     %{?with_infiniband:--enable-infiniband --enable-opa2}%{!?with_infiniband:--disable-infiniband --disable-opa2} \
     %{?with_ibnet:--enable-ibnet}%{!?with_ibnet:--disable-ibnet} \
-    %{?with_rdc:--enable-rdc RDC_CFLAGS=-I/opt/rocm-%{rocm_version}/rdc/include RDC_LIBS=-L/opt/rocm-%{rocm_version}/rdc/lib}%{!?with_rdc:--disable-rdc} \
+    %{?with_rdc:--enable-rdc RDC_CFLAGS=-I/opt/rocm-%{rocm_version}/rdc/include RDC_LIBS=-L/opt/rocm-%{rocm_version}/rdc/lib -R/opt/rocm-%{rocm_version}/rdc/lib}%{!?with_rdc:--disable-rdc} \
     %{?with_kafka:--enable-kafka}%{!?with_kafka:--disable-kafka} \
     %{?with_slingshot:--enable-slingshot}%{!?with_slingshot:--disable-slingshot} \
     %{?with_rabbitkw:--enable-rabbitkw}%{!?with_rabbitkw:--disable-rabbitkw} \
