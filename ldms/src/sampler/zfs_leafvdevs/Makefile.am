@@ -11,7 +11,7 @@ AM_LDFLAGS = @OVIS_LIB_ABS@
 COMMON_LIBADD = -lsampler_base -lldms -lovis_util -lcoll \
 		@LDFLAGS_GETTIME@
 
-libzfs_leafvdevs_la_SOURCES = zfs_leafvdevs.c ../zfs_common/zfs_common.c
+libzfs_leafvdevs_la_SOURCES = zfs_leafvdevs.c ../zfs_common/zfs_common.c ../zfs_common/zfs_common.h
 libzfs_leafvdevs_la_LIBADD = $(COMMON_LIBADD)
 pkglib_LTLIBRARIES += libzfs_leafvdevs.la
 dist_man7_MANS = Plugin_zfs_leafvdevs.man
