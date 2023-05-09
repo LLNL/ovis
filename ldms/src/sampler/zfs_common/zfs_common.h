@@ -16,6 +16,7 @@
 #endif
 
 #define DEFAULT_ARRAY_LEN 32
+#define MAX_ZFS_NAME_LEN  256
 
 typedef enum {
 	TOPVDEV_COUNT  = 0,
