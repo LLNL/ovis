@@ -2,6 +2,8 @@
 %bcond_without slurm
 %bcond_without python
 %bcond_without papi
+%bcond_without infiniband
+%bcond_with dcgm
 
 %ifarch ppc64le
   %undefine with_slurm
@@ -42,7 +44,16 @@ Requires: munge
 %if %{with papi}
 Requires: papi600
 %endif
-
+%if %{with infiniband}
+%ifnarch ppc64le
+# MOFED on ppc64le doesn't need the -devel package
+BuildRequires: infiniband-diags-devel
+%endif
+BuildRequires: rdma-core-devel
+BuildRequires: opensm-devel
+Requires: infiniband-diags-devel
+Requires: rdma-core-devel
+%endif
 BuildRequires: gcc
 BuildRequires: glib2-devel
 BuildRequires: openssl-devel
@@ -103,6 +114,8 @@ export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
     --enable-genderssystemd \
     %{?with_python:--enable-python}%{!?with_python:--disable-python} \
     %{?with_slurm:--with-slurm}%{!?with_slurm:--without-slurm} \
+    %{?with_dcgm:--with-dcgm}%{!?with_dcgm:--without-dcgm} \
+    %{?with_infiniband:--enable-infiniband}%{!?with_infiniband:--disable-infiniband} \
 %if %{with papi}
     --enable-papi \
     --with-libpapi-prefix=/usr/papi600 \
@@ -116,9 +129,9 @@ rm -rf $RPM_BUILD_ROOT
 make DESTDIR=${RPM_BUILD_ROOT} V=1 install
 # rearrange ldms systemd init scripts and associated files into needed locations
 mkdir -p ${RPM_BUILD_ROOT}%{_unitdir}
-cp ${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/services/ldms*.service ${RPM_BUILD_ROOT}%{_unitdir}
+cp ${RPM_BUILD_ROOT}%{_docdir}/%{name}/sample_init_scripts/genders/systemd/services/ldms*.service ${RPM_BUILD_ROOT}%{_unitdir}
 mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}
-cp -r ${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/etc/* ${RPM_BUILD_ROOT}%{_sysconfdir}
+cp -r ${RPM_BUILD_ROOT}%{_docdir}/%{name}/sample_init_scripts/genders/systemd/etc/* ${RPM_BUILD_ROOT}%{_sysconfdir}
 # only used by sysv init scripts
 rm ${RPM_BUILD_ROOT}%{_bindir}/ldmsd-pre-sysvinit || /bin/true
 
@@ -185,7 +198,7 @@ Doxygen files for ovis package.
 %files doc
 %defattr(-,root,root)
 %{_mandir}/*/*
-%{_docdir}/%{name}-%{tarball_version}
+%{_docdir}/%{name}
 %docdir %{_docdir}
 
 %if %{with python}
@@ -203,6 +216,20 @@ Python files for ovis
 %defattr(-,root,root)
 %{_prefix}/lib/python*/site-packages/ovis_ldms
 %{_prefix}/lib/python*/site-packages/ldmsd
+%endif
+
+%if %{with dcgm}
+%package dcgm-sampler
+Summary: LDMS sampler plugin that supports Nvidia DCGM
+Group: System Environment/Base
+BuildRequires: datacenter-gpu-manager >= 1.7.2
+Requires: datacenter-gpu-manager >= 1.7.2
+%description dcgm-sampler
+LDMS sampler plugin that supports Nvidia DCGM
+%files dcgm-sampler
+%defattr(-,root,root,-)
+%{_libdir}/*/*dcgm*
+%{_mandir}/*/*dcgm*
 %endif
 
 %changelog

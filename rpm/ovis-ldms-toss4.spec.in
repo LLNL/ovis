@@ -19,11 +19,13 @@
   %undefine with_rdc
   %undefine with_slingshot
   %undefine with_avrokafka
+  %undefine with_kafka
 %endif
 %ifarch aarch64
   %undefine with_rdc
   %undefine with_slingshot
   %undefine with_avrokafka
+  %undefine with_kafka
 %endif
 
 %global tarball_version @VERSION@
