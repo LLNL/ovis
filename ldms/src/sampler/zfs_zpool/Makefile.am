@@ -11,7 +11,7 @@ AM_LDFLAGS = @OVIS_LIB_ABS@
 COMMON_LIBADD = -lsampler_base -lldms -lovis_util -lcoll \
 		@LDFLAGS_GETTIME@
 
-libzfs_zpool_la_SOURCES = zfs_zpool.c ../zfs_common/zfs_common.c ../zfs_common/zfs_common.h
+libzfs_zpool_la_SOURCES = zfs_zpool.c ../zfs_common/zfs_common.c
 libzfs_zpool_la_LIBADD = $(COMMON_LIBADD)
 pkglib_LTLIBRARIES += libzfs_zpool.la
 dist_man7_MANS = Plugin_zfs_zpool.man
