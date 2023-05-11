@@ -54,6 +54,16 @@ int get_leaf_stats(zpool_handle_t *zhp, void *data);
 #define POOL_IO_SIZE_MEASUREMENT        "zpool_io_size"
 #define MIN_SIZE_INDEX  9  /* minimum size index 9 = 512 bytes */
 
+/* global options */
+int execd_mode 			= 0;
+int no_histograms 		= 1;
+int sum_histogram_buckets 	= 0;
+char metric_data_type		= 'u';
+uint64_t metric_value_mask	= UINT64_MAX;
+uint64_t timestamp 		= 0;
+int complained_about_sync 	= 0;
+char *tags 			= "";
+
 typedef int (*stat_printer_f)(nvlist_t *, const char *, const char *);
 
 static ldmsd_msg_log_f  log_fn;
@@ -91,6 +101,7 @@ static struct ldms_metric_template_s zpool_vdev_metrics[] = {
  * to manage heap. Like auto resize as a base function */
 
 #define VDEV_METRICS_LEN (ARRAY_LEN(zpool_vdev_metrics) - 1)
+static int    the_metric_len = VDEV_METRICS_LEN;
 static int    vdev_metric_ids[VDEV_METRICS_LEN];
 static size_t zpool_vdev_heap_sz;
 
@@ -175,6 +186,7 @@ static int config(struct ldmsd_plugin *self,
                   struct attr_value_list *kwl, struct attr_value_list *avl)
 {
         int rc = 0;
+        char *value;
 
         log_fn(LDMSD_LDEBUG, SAMP" config() called\n");
 
@@ -290,6 +302,60 @@ struct ldmsd_plugin *get_plugin(ldmsd_msg_log_f pf)
         return &plugin.base;
 }
 
+
+/*
+ * get a string suitable for an influxdb tag that describes this vdev
+ *
+ * By default only the vdev hierarchical name is shown, separated by '/'
+ * If the vdev has an associated path, which is typical of leaf vdevs,
+ * then the path is added.
+ * It would be nice to have the devid instead of the path, but under
+ * Linux we cannot be sure a devid will exist and we'd rather have
+ * something than nothing, so we'll use path instead.
+ */
+static char *get_vdev_desc(nvlist_t *nvroot, const char *parent_name)
+{
+        static char vdev_desc[2 * MAXPATHLEN];
+        char *vdev_type = NULL;
+        uint64_t vdev_id = 0;
+        char vdev_value[MAXPATHLEN];
+        char *vdev_path = NULL;
+        char *s, *t;
+
+        if (nvlist_lookup_string(nvroot, ZPOOL_CONFIG_TYPE, &vdev_type) != 0) {
+                vdev_type = "unknown";
+        }
+        if (nvlist_lookup_uint64(nvroot, ZPOOL_CONFIG_ID, &vdev_id) != 0) {
+                vdev_id = UINT64_MAX;
+        }
+        if (nvlist_lookup_string(
+            nvroot, ZPOOL_CONFIG_PATH, &vdev_path) != 0) {
+                vdev_path = NULL;
+        }
+
+        if (parent_name == NULL) {
+                s = escape_string(vdev_type);
+                (void) snprintf(vdev_value, sizeof (vdev_value), "vdev=%s", s);
+                free(s);
+        } else {
+                s = escape_string((char *)parent_name);
+                t = escape_string(vdev_type);
+                (void) snprintf(vdev_value, sizeof (vdev_value),
+                    "vdev=%s/%s-%llu", s, t, (u_longlong_t)vdev_id);
+                free(s);
+                free(t);
+        }
+        if (vdev_path == NULL) {
+                (void) snprintf(vdev_desc, sizeof (vdev_desc), "%s",
+                    vdev_value);
+        } else {
+                s = escape_string(vdev_path);
+                (void) snprintf(vdev_desc, sizeof (vdev_desc), "path=%s,%s",
+                    s, vdev_value);
+                free(s);
+	}
+        return (vdev_desc);
+}
 
 /*
  * vdev summary stats are a combination of the data shown by
@@ -429,6 +495,7 @@ int get_leaf_stats(zpool_handle_t *zhp, void *data)
         boolean_t       missing;
         nvlist_t       *config, *nvroot;
         vdev_stat_t    *vs;
+        struct timespec tv;
         char           *pool_name;
 
         if (zpool_refresh_stats(zhp, &missing) != 0) {

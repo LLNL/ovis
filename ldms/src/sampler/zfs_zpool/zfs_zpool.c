@@ -59,10 +59,17 @@ static int get_pool_scan_status(nvlist_t *nvroot, const char *pool_name, ldms_mv
 #define POOL_IO_SIZE_MEASUREMENT        "zpool_io_size"
 #define MIN_SIZE_INDEX  9  /* minimum size index 9 = 512 bytes */
 
+/* global options */
+int execd_mode 			= 0;
+int no_histograms 		= 1;
+int sum_histogram_buckets 	= 0;
+char metric_data_type		= 'u';
+uint64_t metric_value_mask	= UINT64_MAX;
+uint64_t timestamp 		= 0;
+int complained_about_sync 	= 0;
+char *tags 			= "";
 
 typedef int (*stat_printer_f)(nvlist_t *, const char *, const char *);
-
-int complained_about_sync = 0;
 
 static ldmsd_msg_log_f  log_fn;
 static base_data_t      sampler_base;
@@ -191,6 +198,7 @@ static int config(struct ldmsd_plugin *self,
                   struct attr_value_list *kwl, struct attr_value_list *avl)
 {
         int rc = 0;
+        char *value;
 
         log_fn(LDMSD_LDEBUG, SAMP" config() called\n");
 
@@ -368,11 +376,13 @@ static char *get_vdev_desc(nvlist_t *nvroot, const char *parent_name)
 static int get_detailed_pool_stats(nvlist_t *nvroot, const char *pool_name)
 {
         nvlist_t *nv_ex;
-        uint64_t cap;
+        uint64_t value, cap;
 	ldms_mval_t record_instance;
         uint_t c;
         vdev_stat_t *vs;
 	int   rc = 0;
+        char *vdev_desc = NULL;
+        vdev_desc = get_vdev_desc(nvroot, NULL);
 
 	if (nvlist_lookup_uint64_array(nvroot, ZPOOL_CONFIG_VDEV_STATS,
                 (uint64_t **)&vs, &c) != 0) {
@@ -478,7 +488,9 @@ static int get_pool_scan_status(nvlist_t *nvroot, const char *pool_name, ldms_mv
 	uint_t c;
 	int64_t elapsed;
 	uint64_t examined, pass_exam, paused_time, paused_ts, rate;
+	uint64_t remaining_time;
 	pool_scan_stat_t *ps = NULL;
+	double pct_done;
 	char *state[DSS_NUM_STATES] = {
 	    "NONE",
 	    "scanning",
@@ -533,6 +545,9 @@ static int get_pool_scan_status(nvlist_t *nvroot, const char *pool_name, ldms_mv
 
 	/* overall progress */
 	examined = ps->pss_examined ? ps->pss_examined : 1;
+	pct_done = 0.0;
+	if (ps->pss_to_examine > 0)
+		pct_done = 100.0 * examined / ps->pss_to_examine;
 
 #ifdef EZFS_SCRUB_PAUSED
 	paused_ts = ps->pss_pass_scrub_pause;
@@ -550,6 +565,7 @@ static int get_pool_scan_status(nvlist_t *nvroot, const char *pool_name, ldms_mv
 		pass_exam = ps->pss_pass_exam ? ps->pss_pass_exam : 1;
 		rate = pass_exam / elapsed;
 		rate = (rate > 0) ? rate : 1;
+		remaining_time = ps->pss_to_examine - examined / rate;
 	} else {
 		elapsed =
 		    (int64_t)ps->pss_end_time - (int64_t)ps->pss_pass_start -
@@ -557,6 +573,7 @@ static int get_pool_scan_status(nvlist_t *nvroot, const char *pool_name, ldms_mv
 		elapsed = (elapsed > 0) ? elapsed : 1;
 		pass_exam = ps->pss_pass_exam ? ps->pss_pass_exam : 1;
 		rate = pass_exam / elapsed;
+		remaining_time = 0;
 	}
 	rate = rate ? rate : 1;
 
@@ -596,6 +613,7 @@ static int get_zpool_stats(zpool_handle_t *zhp, void *data)
         boolean_t       missing;
         nvlist_t       *config, *nvroot;
         vdev_stat_t    *vs;
+        struct timespec tv;
         char           *pool_name;
 
         if (zpool_refresh_stats(zhp, &missing) != 0) {

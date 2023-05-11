@@ -59,6 +59,7 @@ static int get_zpool_vdevs_count(nvlist_t *nvroot, const char *pool_name, vdevs_
 {
         uint_t     children;
         nvlist_t **child;
+	char       vdev_name[256];
 
 
         if (nvlist_lookup_nvlist_array(nvroot, ZPOOL_CONFIG_CHILDREN,
@@ -88,6 +89,7 @@ int get_vdevs_count(zpool_handle_t *zhp, void *data)
         boolean_t       missing;
         nvlist_t       *config, *nvroot;
         vdev_stat_t    *vs;
+        struct timespec tv;
         char           *pool_name;
 
         if (zpool_refresh_stats(zhp, &missing) != 0) {
