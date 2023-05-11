@@ -1,5 +1,5 @@
 
-/* -*- c-basic-offset 8 -*- */
+/* -*- c-basic-offser: 8 -*- */
 /* Copyright 2022 Lawrence Livermore National Security, LLC
  * See the top-level COPYING file for details.
  *
