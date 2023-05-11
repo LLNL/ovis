@@ -29,7 +29,7 @@
 %endif
 
 %global tarball_version @VERSION@
-%global rocm_version 5.2.3
+%global rocm_version 5.5.0
 
 %undefine _missing_build_ids_terminate_build
 # Because of the way we handle /opt in TOSS, we can not have a Requires
@@ -156,7 +156,7 @@ export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
     %{?with_dcgm:--with-dcgm}%{!?with_dcgm:--without-dcgm} \
     %{?with_infiniband:--enable-infiniband --enable-opa2}%{!?with_infiniband:--disable-infiniband --disable-opa2} \
     %{?with_ibnet:--enable-ibnet}%{!?with_ibnet:--disable-ibnet} \
-    %{?with_rdc:--enable-rdc RDC_CFLAGS=-I/opt/rocm-%{rocm_version}/rdc/include RDC_LIBS="-L/opt/rocm-%{rocm_version}/rdc/lib -R/opt/rocm-%{rocm_version}/rdc/lib"}%{!?with_rdc:--disable-rdc} \
+    %{?with_rdc:--enable-rdc --with-librdc_bootstrap-prefix=/opt/rocm-%{rocm_version}}%{!?with_rdc:--disable-rdc} \
     %{?with_kafka:--enable-kafka}%{!?with_kafka:--disable-kafka} \
     %{?with_avrokafka:--enable-store-avro-kafka}%{!?with_avrokafka:--disable-store-avro-kafka} \
     %{?with_slingshot:--enable-slingshot}%{!?with_slingshot:--disable-slingshot} \
