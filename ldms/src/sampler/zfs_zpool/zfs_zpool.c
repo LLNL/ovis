@@ -30,7 +30,9 @@
 #include <stddef.h>
 
 
-#define SAMP "zfs_zpool"
+#define SAMP "zpools_stats"
+#define MAX_LINE_LEN 1024
+
 
 #ifndef IFNAMSIZ
 /* from "linux/if.h" */
@@ -90,23 +92,23 @@ static const char * const operation_types[] = {
 };
 
 /* metric templates for a zpool and scan status if any */
-static struct ldms_metric_template_s zfs_zpool_metrics[] = {
-    {"pool",              0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"state",             0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"total",             0, LDMS_V_U64,        "",                1 },
-    {"allocated",         0, LDMS_V_U64,        "",                1 },
-    {"free",              0, LDMS_V_U64,        "",                1 },
-    {"used",              0, LDMS_V_U64,        "",                1 },
-    {"scan_func",         0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"scan_status",       0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"scan_repaired",     0, LDMS_V_U64,        "",                1 },
-    {"scan_completed_in", 0, LDMS_V_U64,        "",                1 },
-    {"scan_errors",       0, LDMS_V_U32,        "",                1 },
-    {"scan_completed_on", 0, LDMS_V_U64,        "",                1 },
+static struct ldms_metric_template_s zpool_vdev_metrics[] = {
+    {"pool",              0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"state",             0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"total",             0, LDMS_V_U64,        "",            1 },
+    {"allocated",         0, LDMS_V_U64,        "",            1 },
+    {"free",              0, LDMS_V_U64,        "",            1 },
+    {"used",              0, LDMS_V_U64,        "",            1 },
+    {"scan_func",         0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"scan_status",       0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"scan_repaired",     0, LDMS_V_U64,        "",            1 },
+    {"scan_completed_in", 0, LDMS_V_U64,        "",            1 },
+    {"scan_errors",       0, LDMS_V_U32,        "",            1 },
+    {"scan_completed_on", 0, LDMS_V_U64,        "",            1 },
     {0}
 };
 
-#define ZPOOL_METRICS_LEN (ARRAY_LEN(zfs_zpool_metrics) - 1)
+#define ZPOOL_METRICS_LEN (ARRAY_LEN(zpool_vdev_metrics) - 1)
 static int    zpool_metric_ids[ZPOOL_METRICS_LEN];
 static size_t zpool_heap_sz;
 
@@ -132,8 +134,8 @@ static int initialize_ldms_structs()
             goto err1;
 
         /* create the vdev record */
-        zpool_vdev_def  = ldms_record_from_template("zfs_zpool_stats",
-			                            zfs_zpool_metrics,
+        zpool_vdev_def  = ldms_record_from_template("zpool_vdevs_stats",
+			                            zpool_vdev_metrics,
 						    zpool_metric_ids);
         if (zpool_vdev_def == NULL)
             goto err2;
@@ -192,7 +194,7 @@ static int config(struct ldmsd_plugin *self,
 
         log_fn(LDMSD_LDEBUG, SAMP" config() called\n");
 
-        sampler_base = base_config(avl, SAMP, "zfs_zpool_metrics", log_fn);
+        sampler_base = base_config(avl, SAMP, "zpools_metrics", log_fn);
         if ((g_zfs = libzfs_init()) == NULL) {
             rc = errno;
             ldmsd_log(LDMSD_LERROR,

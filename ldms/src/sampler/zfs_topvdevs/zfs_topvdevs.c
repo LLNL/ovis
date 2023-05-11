@@ -1,4 +1,4 @@
-/* -*- c-basic-offset: 8 -*- */
+/* -*- c-basic-offset 8 -*- */
 /* Copyright 2022 Lawrence Livermore National Security, LLC
  * See the top-level COPYING file for details.
  *
@@ -30,7 +30,8 @@
 #include <stddef.h>
 
 
-#define SAMP "zfs_topvdevs"
+#define SAMP "zpools_stats"
+#define MAX_LINE_LEN 1024
 
 #ifndef IFNAMSIZ
 /* from "linux/if.h" */
@@ -47,6 +48,15 @@
 int
 get_stats(zpool_handle_t *zhp, void *data);
 
+#define POOL_MEASUREMENT         "zpool_stats"
+#define SCAN_MEASUREMENT         "zpool_scan_stats"
+#define VDEV_MEASUREMENT         "zpool_vdev_stats"
+#define POOL_LATENCY_MEASUREMENT "zpool_latency"
+#define POOL_QUEUE_MEASUREMENT   "zpool_vdev_queue"
+#define MIN_LAT_INDEX   10  /* minimum latency index 10 = 1024ns */
+#define POOL_IO_SIZE_MEASUREMENT        "zpool_io_size"
+#define MIN_SIZE_INDEX  9  /* minimum size index 9 = 512 bytes */
+
 typedef int (*stat_printer_f)(nvlist_t *, const char *, const char *);
 
 static ldmsd_msg_log_f  log_fn;
@@ -61,29 +71,29 @@ static struct {
 static ldms_mval_t list_handle;
 
 /* metric templates for a virtual device */
-static struct ldms_metric_template_s zfs_topvdevs_metrics[] = {
-    {"zpoolname",                0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"state",                    0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"vdevname",                 0, LDMS_V_CHAR_ARRAY, "", MAX_ZFS_NAME_LEN },
-    {"alloc",                    0, LDMS_V_U64,        "",                1 },
-    {"free",                     0, LDMS_V_U64,        "",                1 },
-    {"size",                     0, LDMS_V_U64,        "",                1 },
-    {"read_bytes",               0, LDMS_V_U64,        "",                1 },
-    {"read_errors",              0, LDMS_V_U64,        "",                1 },
-    {"read_ops",                 0, LDMS_V_U64,        "",                1 },
-    {"write_bytes",              0, LDMS_V_U64,        "",                1 },
-    {"write_errors",             0, LDMS_V_U64,        "",                1 },
-    {"write_ops",                0, LDMS_V_U64,        "",                1 },
-    {"checksum_errors",          0, LDMS_V_U64,        "",                1 },
-    {"fragmentation",            0, LDMS_V_U64,        "",                1 },
-    {"init_errors",              0, LDMS_V_U64,        "",                1 },
+static struct ldms_metric_template_s zpool_vdev_metrics[] = {
+    {"zpoolname",                0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"state",                    0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"vdevname",                 0, LDMS_V_CHAR_ARRAY, "", MAX_LINE_LEN },
+    {"alloc",                    0, LDMS_V_U64,        "",            1 },
+    {"free",                     0, LDMS_V_U64,        "",            1 },
+    {"size",                     0, LDMS_V_U64,        "",            1 },
+    {"read_bytes",               0, LDMS_V_U64,        "",            1 },
+    {"read_errors",              0, LDMS_V_U64,        "",            1 },
+    {"read_ops",                 0, LDMS_V_U64,        "",            1 },
+    {"write_bytes",              0, LDMS_V_U64,        "",            1 },
+    {"write_errors",             0, LDMS_V_U64,        "",            1 },
+    {"write_ops",                0, LDMS_V_U64,        "",            1 },
+    {"checksum_errors",          0, LDMS_V_U64,        "",            1 },
+    {"fragmentation",            0, LDMS_V_U64,        "",            1 },
+    {"init_errors",              0, LDMS_V_U64,        "",            1 },
     {0},
 };
 
 /* need to find a better way more intuitive than that
  * to manage heap. Like auto resize as a base function */
 
-#define VDEV_METRICS_LEN (ARRAY_LEN(zfs_topvdevs_metrics) - 1)
+#define VDEV_METRICS_LEN (ARRAY_LEN(zpool_vdev_metrics) - 1)
 static int    vdev_metric_ids[VDEV_METRICS_LEN];
 static size_t zpool_vdev_heap_sz;
 
@@ -109,8 +119,8 @@ static int initialize_ldms_structs()
             goto err1;
 
         /* create the vdev record */
-        zpool_vdev_def  = ldms_record_from_template("zfs_topvdevs_stats",
-			                            zfs_topvdevs_metrics,
+        zpool_vdev_def  = ldms_record_from_template("zpool_vdevs_stats",
+			                            zpool_vdev_metrics,
 						    vdev_metric_ids);
         if (zpool_vdev_def == NULL)
             goto err2;
