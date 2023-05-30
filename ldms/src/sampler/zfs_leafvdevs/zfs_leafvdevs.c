@@ -169,7 +169,7 @@ static int config(struct ldmsd_plugin *self,
 
         log_fn(LDMSD_LDEBUG, SAMP" config() called\n");
 
-        sampler_base = base_config(avl, SAMP, "zfs_leafvdevs", log_fn);
+        sampler_base = base_config(avl, SAMP, "zfs_leafvdevs_metrics", log_fn);
         if ((g_zfs = libzfs_init()) == NULL) {
             rc = errno;
             ldmsd_log(LDMSD_LERROR,
