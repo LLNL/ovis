@@ -863,7 +863,7 @@ int ldmsd_row_to_json_avro_schema(ldmsd_row_t row, char **str, size_t *len)
 		switch (col->type) {
 		case LDMS_V_TIMESTAMP:
 			rc = strbuf_printf(&h,
-                                           "{\"name\":\"%s\",\"type\":%s",
+                                           "{\"name\":\"%s\",\"type\":%s}",
 					   avro_name, col_type_str(col->type));
 			if (rc)
 				goto err_0;
