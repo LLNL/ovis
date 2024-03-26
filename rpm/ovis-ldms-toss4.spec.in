@@ -13,6 +13,8 @@
 %bcond_without tests
 %bcond_without avrokafka
 %bcond_without zfs
+%bcond_without jansson
+%bcond_without variorum
 
 %ifarch ppc64le
   %undefine with_slurm
@@ -123,6 +125,14 @@ BuildRequires: librabbitmq-devel
 Requires: libzfs5
 BuildRequires: libzfs5-devel
 %endif
+%if %{with jansson}
+Requires: jansson
+BuildRequires: jansson-devel
+%endif
+%if %{with variorum}
+Requires: variorum
+BuildRequires: variorum
+%endif
 
 Url: https://github.com/ovis-hpc/ovis
 
@@ -163,6 +173,7 @@ export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
     %{?with_rabbitkw:--enable-rabbitkw}%{!?with_rabbitkw:--disable-rabbitkw} \
     %{?with_zfs:--enable-zfs}%{!?with_zfs:--disable-zfs} \
     %{?with_tests:--enable-slurmtest --enable-ldms-test}%{!?with_tests:--disable-slurmtest --disable-ldms-test} \
+    %{?with_variorum:--enable-variorum}%{!?with_variorum:--disable-variorum} \
 %if %{with papi}
     --enable-papi \
     --with-libpapi-prefix=/usr/papi600 \
