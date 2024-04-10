@@ -7,7 +7,7 @@
 %bcond_without rdc
 %bcond_without kafka
 %bcond_without slingshot
-%bcond_with genders
+%bcond_without genders
 %bcond_without rabbitkw
 %bcond_without ibnet
 %bcond_without tests
@@ -186,14 +186,27 @@ make V=1 -j 16
 rm -rf $RPM_BUILD_ROOT
 make DESTDIR=${RPM_BUILD_ROOT} V=1 install
 %if %{with genders}
-# rearrange ldms systemd init scripts and associated files into needed locations
-mkdir -p ${RPM_BUILD_ROOT}%{_unitdir}
-cp ${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/services/ldms*.service ${RPM_BUILD_ROOT}%{_unitdir}
-mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}
-cp -r ${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/etc/* ${RPM_BUILD_ROOT}%{_sysconfdir}
-%endif
 # only used by sysv init scripts
 rm ${RPM_BUILD_ROOT}%{_bindir}/ldmsd-pre-sysvinit || /bin/true
+# rearrange minimal ldms genders systemd init scripts support into needed locations
+mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets
+mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d/ClusterGenders
+mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d/plugins-conf
+minconf="
+sysconfig/ldms.d/README
+sysconfig/ldms.d/ClusterGenders/README
+sysconfig/ldms.d/ClusterSecrets/README
+sysconfig/ldms.d/ClusterSecrets/ldmsauth.conf
+sysconfig/ldms.d/ldms-functions
+sysconfig/ldms.d/ldmsd
+sysconfig/ldms.d/plugins-conf/README
+sysconfig/ldms.d/plugins-conf/init_jobinfo.sh
+"
+for i in $minconf; do
+        cp ${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/etc/$i ${RPM_BUILD_ROOT}%{_sysconfdir}/$i
+done
+%endif
+
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -213,23 +226,14 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_libdir}/*/*rdc_sampler*
 %exclude %{_mandir}/*/*_rdc_*
 %endif
-%if %{with genders}
-%{_unitdir}/ldmsd.service
-%{_unitdir}/ldmsd@.service
-%doc %{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/README
-%{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/genders.agg
-%{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/genders.local
-%doc %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/README
-%config(noreplace)%{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/ldmsauth.conf
-%doc %{_sysconfdir}/sysconfig/ldms.d/README
-%config(noreplace)%{_sysconfdir}/sysconfig/ldms.d/debug/ldmsd.extra.local.conf
-%config %{_sysconfdir}/sysconfig/ldms.d/ldms-functions
-%config %{_sysconfdir}/sysconfig/ldms.d/ldmsd
-%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/ldmsd.agg.conf
-%doc %{_sysconfdir}/sysconfig/ldms.d/ldmsd.all_instances.conf.example
-%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/ldmsd.local.conf
-%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/*
+%exclude %{_bindir}/ldmsctl_args3
+%exclude %{_bindir}/ldmsd-pre-systemd
+%exclude %{_bindir}/ldmsd-wrapper.sh
+%exclude %{_sysconfdir}/sysconfig/*
 %if %{with tests}
+%exclude %{_bindir}/ldms-static-test.sh
+%exclude %{_pkgdocdir}/examples/static-test
+%exclude %{_mandir}/*/ldms-static-test*
 %exclude %{_bindir}/pll-ldms-static-test.sh
 %exclude %{_pkgdocdir}/examples/slurm-test
 %exclude %{_mandir}/*/pll-ldms-static-test*
@@ -239,7 +243,8 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_libdir}/*/libgrptest*
 %exclude %{_libdir}/*/libtest_sampler*
 %exclude %{_sbindir}/test_ldms*
-%endif
+%exclude %{_sbindir}/ovis_json_perf_test
+%exclude %{_sbindir}/ovis_json_test
 %endif
 
 %package devel
@@ -257,6 +262,39 @@ package.
 %{_includedir}/*/*/*.h
 %{_includedir}/ovis-ldms-config.h
 
+%if %{with genders}
+%package genders
+Summary: LDMS base initscripts for libgenders control of %{name}
+Group: %{ldms_grp}
+Requires: ovis-ldms = %{version}
+Obsoletes: ovis-initscripts-base
+Obsoletes: ovis-initscripts-systemd
+Obsoletes: ovis-initscripts-sysv
+%description genders
+This is the support file set for libgenders based booting of LDMS daemons.
+Users normally provide information via /etc/genders (or alternate file)
+%files genders
+%defattr(-,root,root)
+%{_bindir}/ldmsd-wrapper.sh
+%config %{_bindir}/ldmsd-pre-systemd
+%{_bindir}/ldmsctl_args3
+%{_sysconfdir}/sysconfig/ldms.d/README
+%doc %{_sysconfdir}/sysconfig/ldms.d/README
+%{_sysconfdir}/sysconfig/ldms.d/ldmsd
+%config %{_sysconfdir}/sysconfig/ldms.d/ldmsd
+%{_sysconfdir}/sysconfig/ldms.d/ldms-functions
+%config %{_sysconfdir}/sysconfig/ldms.d/ldms-functions
+%{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/README
+%doc %{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/README
+%{_sysconfdir}/sysconfig/ldms.d/plugins-conf/*
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/*
+%{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/README
+%doc %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/README
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/ldmsauth.conf
+%docdir %{_pkgdocdir}
+%{_pkgdocdir}/sample_init_scripts
+%endif
+
 %package doc
 Summary: Documentation files for %{name}
 Group: System Environment/Libraries
@@ -267,6 +305,9 @@ Doxygen files for ovis package.
 %{_mandir}/*/*
 %{_pkgdocdir}
 %docdir %{_pkgdocdir}
+%exclude %{_pkgdocdir}/examples/slurm-test
+%exclude %{_pkgdocdir}/examples/static-test
+%exclude %{_pkgdocdir}/sample_init_scripts
 
 %if %{with python}
 %package python3
@@ -325,6 +366,7 @@ This is a collection of test scripts for (LDMS).
 %if %{with tests}
 %{_bindir}/pll-ldms-static-test.sh
 %{_pkgdocdir}/examples/slurm-test
+%{_pkgdocdir}/examples/static-test
 %{_mandir}/*/pll-ldms-static-test*
 %{_libdir}/*/ldms-run-static-tests.test
 %{_libdir}/*/ldms-static-test-bypass
@@ -332,8 +374,12 @@ This is a collection of test scripts for (LDMS).
 %{_libdir}/*/libgrptest*
 %{_libdir}/*/libtest_sampler*
 %{_sbindir}/test_ldms*
+%{_sbindir}/ovis_json_perf_test
+%{_sbindir}/ovis_json_test
 %endif
 
 %changelog
+* Tue Apr 9 2024 Benjamin A Allan <baallan@sandia.gov> 4.4.2
+Split out genders init proprocessor programs and example; move recent tests to tests package.
 * Mon May 11 2020 Christopher J. Morrone <morrone2@llnl.gov> 4.3.3-1
 New rpm packaging for TOSS.
