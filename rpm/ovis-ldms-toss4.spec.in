@@ -193,26 +193,28 @@ rm -rf $RPM_BUILD_ROOT
 make DESTDIR=${RPM_BUILD_ROOT} V=1 install
 %if %{with genders}
 # only used by sysv init scripts
-rm ${RPM_BUILD_ROOT}%{_bindir}/ldmsd-pre-sysvinit || /bin/true
+rm -f ${RPM_BUILD_ROOT}%{_bindir}/ldmsd-pre-sysvinit
 # rearrange minimal ldms genders systemd init scripts support into needed locations
-mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets
-mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d/ClusterGenders
-mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d/plugins-conf
-minconf="
-sysconfig/ldms.d/README
-sysconfig/ldms.d/ClusterGenders/README
-sysconfig/ldms.d/ClusterSecrets/README
-sysconfig/ldms.d/ClusterSecrets/ldmsauth.conf
-sysconfig/ldms.d/ldms-functions
-sysconfig/ldms.d/ldmsd
-sysconfig/ldms.d/plugins-conf/README
-sysconfig/ldms.d/plugins-conf/init_jobinfo.sh
-"
-for i in $minconf; do
-        cp ${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/etc/$i ${RPM_BUILD_ROOT}%{_sysconfdir}/$i
-done
-%endif
+GSRC=${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/etc/sysconfig/ldms.d
+GDEST=${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d
+install -D ${GSRC}/README ${GDEST}/README
+install -D ${GSRC}/ClusterGenders/README ${GDEST}/ClusterGenders/README
+install -D ${GSRC}/ClusterSecrets/README ${GDEST}/ClusterSecrets/README
+install -D ${GSRC}/ClusterSecrets/ldmsauth.conf ${GDEST}/ClusterSecrets/ldmsauth.conf
+install -D ${GSRC}/ldms-functions ${GDEST}/ldms-functions
+install -D ${GSRC}/ldmsd ${GDEST}/ldmsd
+install -D ${GSRC}/plugins-conf/README ${GDEST}/plugins-conf/README
+install -D ${GSRC}/plugins-conf/init_jobinfo.sh ${GDEST}/plugins-conf/init_jobinfo.sh
 
+rm ${GSRC}/README
+rm ${GSRC}/ClusterGenders/README
+rm ${GSRC}/ClusterSecrets/README
+rm ${GSRC}/ClusterSecrets/ldmsauth.conf
+rm ${GSRC}/ldms-functions
+rm ${GSRC}/ldmsd
+rm ${GSRC}/plugins-conf/README
+rm ${GSRC}/plugins-conf/init_jobinfo.sh
+%endif
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -271,33 +273,28 @@ package.
 %if %{with genders}
 %package genders
 Summary: LDMS base initscripts for libgenders control of %{name}
-Group: %{ldms_grp}
-Requires: ovis-ldms = %{version}
+Group: System Environment/Libraries
+Requires: %{name} = %{version}
 Obsoletes: ovis-initscripts-base
 Obsoletes: ovis-initscripts-systemd
 Obsoletes: ovis-initscripts-sysv
 %description genders
-This is the support file set for libgenders based booting of LDMS daemons.
+This is the support file set for libgenders based configuration of LDMS daemons.
 Users normally provide information via /etc/genders (or alternate file)
 %files genders
 %defattr(-,root,root)
 %{_bindir}/ldmsd-wrapper.sh
 %config %{_bindir}/ldmsd-pre-systemd
 %{_bindir}/ldmsctl_args3
-%{_sysconfdir}/sysconfig/ldms.d/README
 %doc %{_sysconfdir}/sysconfig/ldms.d/README
-%{_sysconfdir}/sysconfig/ldms.d/ldmsd
-%config %{_sysconfdir}/sysconfig/ldms.d/ldmsd
-%{_sysconfdir}/sysconfig/ldms.d/ldms-functions
-%config %{_sysconfdir}/sysconfig/ldms.d/ldms-functions
-%{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/README
 %doc %{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/README
-%{_sysconfdir}/sysconfig/ldms.d/plugins-conf/*
-%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/*
-%{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/README
 %doc %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/README
 %config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/ldmsauth.conf
-%docdir %{_pkgdocdir}
+%config %{_sysconfdir}/sysconfig/ldms.d/ldms-functions
+%config %{_sysconfdir}/sysconfig/ldms.d/ldmsd
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/README
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/init_jobinfo.sh
+%docdir %{_pkgdocdir}/sample_init_scripts
 %{_pkgdocdir}/sample_init_scripts
 %endif
 
