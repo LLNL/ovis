@@ -439,8 +439,10 @@ typedef struct ldmsd_row_cache_s {
 } *ldmsd_row_cache_t;
 
 typedef struct ldmsd_row_s *ldmsd_row_t;
+typedef struct ldmsd_row_cache_idx_s *ldmsd_row_cache_idx_t;
 typedef struct ldmsd_row_cache_entry_s {
 	ldmsd_row_t row;
+	ldmsd_row_cache_idx_t idx;
 	struct rbn rbn;
 } *ldmsd_row_cache_entry_t;
 
@@ -450,10 +452,10 @@ typedef struct ldmsd_row_cache_key_s {
 	size_t count;			/* The element count if an array */
 } *ldmsd_row_cache_key_t;
 
-typedef struct ldmsd_row_cache_idx_s {
+struct ldmsd_row_cache_idx_s {
 	int key_count;
 	ldmsd_row_cache_key_t keys;	/* Array of ldmsd_row_cache_key_t */
-} *ldmsd_row_cache_idx_t;
+};
 
 typedef struct ldmsd_row_s *ldmsd_row_t;
 typedef struct ldmsd_row_list_s *ldmsd_row_list_t;

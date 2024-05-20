@@ -204,6 +204,8 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 		assert(rbn);
 		cent = container_of(rbn, struct ldmsd_row_cache_entry_s, rbn);
 		assert(rbn);
+		free(cent->idx->keys);
+		free(cent->idx);
 		free(cent->row);
 		rbt_del(&group->row_tree, rbn);
 		free(cent);
@@ -211,6 +213,7 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 
 	rbn_init(&entry->rbn, row_key);
 	entry->row = row;
+	entry->idx = row_key;
 	rbt_ins(&group->row_tree, &entry->rbn);
 	pthread_mutex_unlock(&rcache->lock);
 
