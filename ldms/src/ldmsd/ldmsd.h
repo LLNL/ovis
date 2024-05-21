@@ -606,7 +606,10 @@ static int is_phony_metric_id(int metric_id)
 
 enum ldmsd_decomp_op {
 	 LDMSD_DECOMP_OP_NONE = 0,
-	 LDMSD_DECOMP_OP_DIFF = 1
+	 LDMSD_DECOMP_OP_DIFF = 1,
+	 LDMSD_DECOMP_OP_MEAN = 2,
+	 LDMSD_DECOMP_OP_MIN = 3,
+	 LDMSD_DECOMP_OP_MAX = 4,
 };
 
 struct ldmsd_col_s {

@@ -584,6 +584,18 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
 					cfg_col->op_name = strdup(jop->str);
 					cfg_col->op = LDMSD_DECOMP_OP_DIFF;
 					cfg_row->op_present = 1; /* true */
+				} else if (0 == strcmp(jop->str, "mean")) {
+					cfg_col->op_name = strdup(jop->str);
+					cfg_col->op = LDMSD_DECOMP_OP_MEAN;
+					cfg_row->op_present = 1; /* true */
+				} else if (0 == strcmp(jop->str, "min")) {
+					cfg_col->op_name = strdup(jop->str);
+					cfg_col->op = LDMSD_DECOMP_OP_MIN;
+					cfg_row->op_present = 1; /* true */
+				} else if (0 == strcmp(jop->str, "max")) {
+					cfg_col->op_name = strdup(jop->str);
+					cfg_col->op = LDMSD_DECOMP_OP_MAX;
+					cfg_row->op_present = 1; /* true */
 				} else {
 					DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d'--col %d : "
 						   "unrecognized functinoal operator '%s'\n",
@@ -1198,9 +1210,315 @@ static int diff_op(ldmsd_row_list_t row_list, ldmsd_row_t dest_row, int col_id)
 	return 0;
 }
 
+static int mean_op(ldmsd_row_list_t row_list, ldmsd_row_t dest_row, int col_id)
+{
+	int count = 0;
+	ldmsd_row_t src_row = TAILQ_FIRST(row_list);
+	ldmsd_col_t dst_col = &dest_row->cols[col_id];
+	union ldms_value zero;
+	memset(&zero, 0, sizeof(zero));
+
+	assign_value(dst_col->mval, &zero, dst_col->type, dst_col->array_len);
+	while (src_row)
+	{
+		switch (dst_col->type) {
+		case LDMS_V_U8:
+			dst_col->mval->v_u8 += src_row->cols[col_id].mval->v_u8;
+			break;
+		case LDMS_V_S8:
+			dst_col->mval->v_s8 += src_row->cols[col_id].mval->v_s8;
+			break;
+		case LDMS_V_U16:
+			dst_col->mval->v_u16 += src_row->cols[col_id].mval->v_u16;
+			break;
+		case LDMS_V_S16:
+			dst_col->mval->v_s16 += src_row->cols[col_id].mval->v_s16;
+			break;
+		case LDMS_V_U32:
+			dst_col->mval->v_u32 += src_row->cols[col_id].mval->v_u32;
+			break;
+		case LDMS_V_S32:
+			dst_col->mval->v_s32 += src_row->cols[col_id].mval->v_s32;
+			break;
+		case LDMS_V_U64:
+			dst_col->mval->v_u64 += src_row->cols[col_id].mval->v_u64;
+			break;
+		case LDMS_V_S64:
+			dst_col->mval->v_s64 += src_row->cols[col_id].mval->v_s64;
+			break;
+		case LDMS_V_F32:
+			dst_col->mval->v_f += src_row->cols[col_id].mval->v_f;
+			break;
+		case LDMS_V_D64:
+			dst_col->mval->v_d += src_row->cols[col_id].mval->v_d;
+			break;
+		case LDMS_V_TIMESTAMP:
+			dst_col->mval->v_ts.sec += src_row->cols[col_id].mval->v_ts.sec;
+			dst_col->mval->v_ts.usec += src_row->cols[col_id].mval->v_ts.usec;
+			break;
+		default:
+			return EINVAL;
+		}
+		count += 1;
+		src_row = TAILQ_NEXT(src_row, entry);
+	}
+	switch (dst_col->type) {
+	case LDMS_V_U8:
+		dst_col->mval->v_u8 /= count;
+		break;
+	case LDMS_V_S8:
+		dst_col->mval->v_s8 /= count;
+		break;
+	case LDMS_V_U16:
+		dst_col->mval->v_u16 /= count;
+		break;
+	case LDMS_V_S16:
+		dst_col->mval->v_s16 /= count;
+		break;
+	case LDMS_V_U32:
+		dst_col->mval->v_u32 /= count;
+		break;
+	case LDMS_V_S32:
+		dst_col->mval->v_s32 /= count;
+		break;
+	case LDMS_V_U64:
+		dst_col->mval->v_u64 /= count;
+		break;
+	case LDMS_V_S64:
+		dst_col->mval->v_s64 /= count;
+		break;
+	case LDMS_V_F32:
+		dst_col->mval->v_f /= count;
+		break;
+	case LDMS_V_D64:
+		dst_col->mval->v_d /= count;
+		break;
+	case LDMS_V_TIMESTAMP:
+		dst_col->mval->v_ts.sec /= count;
+		dst_col->mval->v_ts.usec /= count;
+		break;
+	default:
+		return EINVAL;
+	}
+	return 0;
+}
+
+static int max_op(ldmsd_row_list_t row_list, ldmsd_row_t dest_row, int col_id)
+{
+	ldmsd_row_t src_row = TAILQ_FIRST(row_list);
+	ldmsd_col_t dst_col = &dest_row->cols[col_id];
+	union ldms_value max;
+
+	assign_value(&max, src_row->cols[col_id].mval, dst_col->type, dst_col->array_len);
+	src_row = TAILQ_NEXT(src_row, entry);
+	while (src_row)
+	{
+		switch (dst_col->type) {
+		case LDMS_V_U8:
+			if (max.v_u8 < src_row->cols[col_id].mval->v_u8)
+				max.v_u8 = src_row->cols[col_id].mval->v_u8;
+			break;
+		case LDMS_V_S8:
+			if (max.v_s8 < src_row->cols[col_id].mval->v_s8)
+				max.v_s8 = src_row->cols[col_id].mval->v_s8;
+			break;
+		case LDMS_V_U16:
+			if (max.v_u16 < src_row->cols[col_id].mval->v_u16)
+				max.v_u16 = src_row->cols[col_id].mval->v_u16;
+			break;
+		case LDMS_V_S16:
+			if (max.v_s16 < src_row->cols[col_id].mval->v_s16)
+				max.v_s16 = src_row->cols[col_id].mval->v_s16;
+			break;
+		case LDMS_V_U32:
+			if (max.v_u32 < src_row->cols[col_id].mval->v_u32)
+				max.v_u32 = src_row->cols[col_id].mval->v_u32;
+			break;
+		case LDMS_V_S32:
+			if (max.v_s32 < src_row->cols[col_id].mval->v_s32)
+				max.v_s32 = src_row->cols[col_id].mval->v_s32;
+			break;
+		case LDMS_V_U64:
+			if (max.v_u64 < src_row->cols[col_id].mval->v_u64)
+				max.v_u64 = src_row->cols[col_id].mval->v_u64;
+			break;
+		case LDMS_V_S64:
+			if (max.v_s64 < src_row->cols[col_id].mval->v_s64)
+				max.v_s64 = src_row->cols[col_id].mval->v_s64;
+			break;
+		case LDMS_V_F32:
+			if (max.v_f < src_row->cols[col_id].mval->v_f)
+				max.v_f = src_row->cols[col_id].mval->v_f;
+			break;
+		case LDMS_V_D64:
+			if (max.v_d < src_row->cols[col_id].mval->v_d)
+				max.v_d = src_row->cols[col_id].mval->v_d;
+			break;
+		case LDMS_V_TIMESTAMP:
+			if (max.v_ts.sec < src_row->cols[col_id].mval->v_ts.sec) {
+				max.v_ts = src_row->cols[col_id].mval->v_ts;
+			} else if (max.v_ts.sec == src_row->cols[col_id].mval->v_ts.sec) {
+				if (max.v_ts.usec < src_row->cols[col_id].mval->v_ts.usec) {
+					max.v_ts = src_row->cols[col_id].mval->v_ts;
+				}
+			}
+			break;
+		default:
+			return EINVAL;
+		}
+		src_row = TAILQ_NEXT(src_row, entry);
+	}
+	switch (dst_col->type) {
+	case LDMS_V_U8:
+		dst_col->mval->v_u8 = max.v_u8;
+		break;
+	case LDMS_V_S8:
+		dst_col->mval->v_s8 = max.v_s8;
+		break;
+	case LDMS_V_U16:
+		dst_col->mval->v_u16 = max.v_u16;
+		break;
+	case LDMS_V_S16:
+		dst_col->mval->v_s16 = max.v_s16;
+		break;
+	case LDMS_V_U32:
+		dst_col->mval->v_u32 = max.v_u32;
+		break;
+	case LDMS_V_S32:
+		dst_col->mval->v_s32 = max.v_s32;
+		break;
+	case LDMS_V_U64:
+		dst_col->mval->v_u64 = max.v_u64;
+		break;
+	case LDMS_V_S64:
+		dst_col->mval->v_s64 = max.v_s64;
+		break;
+	case LDMS_V_F32:
+		dst_col->mval->v_f = max.v_f;
+		break;
+	case LDMS_V_D64:
+		dst_col->mval->v_d = max.v_d;
+		break;
+	case LDMS_V_TIMESTAMP:
+		dst_col->mval->v_ts = max.v_ts;
+		break;
+	default:
+		return EINVAL;
+	}
+	return 0;
+}
+
+static int min_op(ldmsd_row_list_t row_list, ldmsd_row_t dest_row, int col_id)
+{
+	ldmsd_row_t src_row = TAILQ_FIRST(row_list);
+	ldmsd_col_t dst_col = &dest_row->cols[col_id];
+	union ldms_value min;
+
+	assign_value(&min, src_row->cols[col_id].mval, dst_col->type, dst_col->array_len);
+	src_row = TAILQ_NEXT(src_row, entry);
+	while (src_row)
+	{
+		switch (dst_col->type) {
+		case LDMS_V_U8:
+			if (min.v_u8 > src_row->cols[col_id].mval->v_u8)
+				min.v_u8 = src_row->cols[col_id].mval->v_u8;
+			break;
+		case LDMS_V_S8:
+			if (min.v_s8 > src_row->cols[col_id].mval->v_s8)
+				min.v_s8 = src_row->cols[col_id].mval->v_s8;
+			break;
+		case LDMS_V_U16:
+			if (min.v_u16 > src_row->cols[col_id].mval->v_u16)
+				min.v_u16 = src_row->cols[col_id].mval->v_u16;
+			break;
+		case LDMS_V_S16:
+			if (min.v_s16 > src_row->cols[col_id].mval->v_s16)
+				min.v_s16 = src_row->cols[col_id].mval->v_s16;
+			break;
+		case LDMS_V_U32:
+			if (min.v_u32 > src_row->cols[col_id].mval->v_u32)
+				min.v_u32 = src_row->cols[col_id].mval->v_u32;
+			break;
+		case LDMS_V_S32:
+			if (min.v_s32 > src_row->cols[col_id].mval->v_s32)
+				min.v_s32 = src_row->cols[col_id].mval->v_s32;
+			break;
+		case LDMS_V_U64:
+			if (min.v_u64 > src_row->cols[col_id].mval->v_u64)
+				min.v_u64 = src_row->cols[col_id].mval->v_u64;
+			break;
+		case LDMS_V_S64:
+			if (min.v_s64 > src_row->cols[col_id].mval->v_s64)
+				min.v_s64 = src_row->cols[col_id].mval->v_s64;
+			break;
+		case LDMS_V_F32:
+			if (min.v_f > src_row->cols[col_id].mval->v_f)
+				min.v_f = src_row->cols[col_id].mval->v_f;
+			break;
+		case LDMS_V_D64:
+			if (min.v_d > src_row->cols[col_id].mval->v_d)
+				min.v_d = src_row->cols[col_id].mval->v_d;
+			break;
+		case LDMS_V_TIMESTAMP:
+			if (min.v_ts.sec > src_row->cols[col_id].mval->v_ts.sec) {
+				min.v_ts = src_row->cols[col_id].mval->v_ts;
+			} else if (min.v_ts.sec == src_row->cols[col_id].mval->v_ts.sec) {
+				if (min.v_ts.usec > src_row->cols[col_id].mval->v_ts.usec) {
+					min.v_ts = src_row->cols[col_id].mval->v_ts;
+				}
+			}
+			break;
+		default:
+			return EINVAL;
+		}
+		src_row = TAILQ_NEXT(src_row, entry);
+	}
+	switch (dst_col->type) {
+	case LDMS_V_U8:
+		dst_col->mval->v_u8 = min.v_u8;
+		break;
+	case LDMS_V_S8:
+		dst_col->mval->v_s8 = min.v_s8;
+		break;
+	case LDMS_V_U16:
+		dst_col->mval->v_u16 = min.v_u16;
+		break;
+	case LDMS_V_S16:
+		dst_col->mval->v_s16 = min.v_s16;
+		break;
+	case LDMS_V_U32:
+		dst_col->mval->v_u32 = min.v_u32;
+		break;
+	case LDMS_V_S32:
+		dst_col->mval->v_s32 = min.v_s32;
+		break;
+	case LDMS_V_U64:
+		dst_col->mval->v_u64 = min.v_u64;
+		break;
+	case LDMS_V_S64:
+		dst_col->mval->v_s64 = min.v_s64;
+		break;
+	case LDMS_V_F32:
+		dst_col->mval->v_f = min.v_f;
+		break;
+	case LDMS_V_D64:
+		dst_col->mval->v_d = min.v_d;
+		break;
+	case LDMS_V_TIMESTAMP:
+		dst_col->mval->v_ts = min.v_ts;
+		break;
+	default:
+		return EINVAL;
+	}
+	return 0;
+}
+
 static ldmsd_functional_op_t op_table[] = {
 	[LDMSD_DECOMP_OP_NONE] = none_op,
 	[LDMSD_DECOMP_OP_DIFF] = diff_op,
+	[LDMSD_DECOMP_OP_MEAN] = mean_op,
+	[LDMSD_DECOMP_OP_MIN] = min_op,
+	[LDMSD_DECOMP_OP_MAX] = max_op,
 };
 
 static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
