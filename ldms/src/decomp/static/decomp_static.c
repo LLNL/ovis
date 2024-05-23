@@ -1783,8 +1783,10 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			col->array_len = mcol->array_len;
 			if (mid_rbn->col_mids[j].mid == LDMSD_PHONY_METRIC_ID_TIMESTAMP)
 				col->mval->v_ts = ts;
-			else
+			else {
+                                assert((void *)col->mval < (void *)&row->mvals[cfg_row->mval_size]);
 				assign_value(col->mval, mcol->mval, mcol->mtype, mcol->array_len);
+                        }
 
 			if (!mcol->le) /* no more elements */
 				continue;
