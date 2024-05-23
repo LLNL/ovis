@@ -368,6 +368,7 @@ typedef struct decomp_static_mid_rbn_s {
 		int mid;
 		int rec_mid;
 		enum ldms_value_type mtype;
+		size_t array_len;
 		enum ldms_value_type rec_mtype;
 		size_t mval_size;	/* Size of this mval */
 		off_t mval_offset;	/* Offset into mval memory for this column */
@@ -466,18 +467,12 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
 	int i, j, k, rc;
 	struct str_int_tbl_s *col_id_tbl = NULL;
 	struct str_int_s key, *tbl_ent;
-	EVP_MD_CTX *evp_ctx = NULL;
 
 	jrows = __jdict_list(jcfg, "rows");
 	if (!jrows) {
 		DECOMP_ERR(reqc, errno, "strgp '%s': The 'rows' attribute is missing, "
 						     "or its value is not a list.\n",
 						     strgp->obj.name);
-		goto err_0;
-	}
-	evp_ctx = EVP_MD_CTX_create();
-	if (!evp_ctx) {
-		DECOMP_ERR(reqc, errno, "out of memory\n");
 		goto err_0;
 	}
 	dcfg = calloc(1, sizeof(*dcfg) + jrows->item_count * sizeof(dcfg->rows[0]));
@@ -499,7 +494,6 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
 
 		cfg_row = &dcfg->rows[i];
 		cfg_row->row_sz = sizeof(struct ldmsd_row_s);
-		EVP_DigestInit_ex(evp_ctx, EVP_sha256(), NULL);
 		rbt_init(&cfg_row->mid_rbt, __mid_rbn_cmp);
 
 		/* schema name */
@@ -604,39 +598,34 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
 				}
 			}
 			jtype = __jdict_str(jcol, "type");
-			if (!jtype) {
-				DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d': col[dst] '%s': "
-						"column['type'] is required\n",
-						strgp->obj.name, i, cfg_col->dst);
-				goto err_0;
+			if (jtype) {
+				cfg_col->type = ldms_metric_str_to_type(jtype->str);
+				if (cfg_col->type == LDMS_V_NONE) {
+					DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d': col[dst] '%s',"
+							"column['type'] value is an unknown type: %s\n",
+							strgp->obj.name, i, cfg_col->dst, jtype->str);
+					goto err_0;
+				}
+			} else {
+				/* Resolved in resolve_metrics */
+				cfg_col->type = LDMS_V_NONE;
 			}
-			cfg_col->type = ldms_metric_str_to_type(jtype->str);
-			if (cfg_col->type == LDMS_V_NONE) {
-				DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d': col[dst] '%s',"
-						"column['type'] value is an unknown type: %s\n",
-						strgp->obj.name, i, cfg_col->dst, jtype->str);
-				goto err_0;
-			}
-			/* update row schema digest */
-			EVP_DigestUpdate(evp_ctx, cfg_col->dst, strlen(cfg_col->dst));
-			EVP_DigestUpdate(evp_ctx, &cfg_col->type, sizeof(cfg_col->type));
+
 			if (!ldms_type_is_array(cfg_col->type))
 				goto not_array_fill;
 			/* array routine */
 			jarray_len = __jdict_ent(jcol, "array_len");
-			if (!jarray_len) {
-				DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d': col[dst] '%s': "
-						"column['array_len'] is required.\n",
-						strgp->obj.name, i, cfg_col->dst);
-				goto err_0;
+			if (jarray_len) {
+				if (jarray_len->type != JSON_INT_VALUE) {
+					DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d': col[dst] '%s': "
+							"column['array_len'] value must be an integer.\n",
+							strgp->obj.name, i, cfg_col->dst);
+					goto err_0;
+				}
+				cfg_col->array_len = jarray_len->value.int_;
+			} else {
+				cfg_col->array_len = 0;
 			}
-			if (jarray_len->type != JSON_INT_VALUE) {
-				DECOMP_ERR(reqc, EINVAL, "strgp '%s': row '%d': col[dst] '%s': "
-						"column['array_len'] value must be an integer.\n",
-						strgp->obj.name, i, cfg_col->dst);
-				goto err_0;
-			}
-			cfg_col->array_len = jarray_len->value.int_;
 
 			/* fill */
 			cfg_col->fill = calloc(cfg_col->array_len, __ldms_vsz(cfg_col->type));
@@ -702,10 +691,6 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
 		next_col:
 			j++;
 		}
-
-		/* Finalize row schema digest */
-		unsigned int len = LDMS_DIGEST_LENGTH;
-		EVP_DigestFinal(evp_ctx, cfg_row->schema_digest.digest, &len);
 
 		/* indices */
 		jidxs = __jdict_list(jrow, "indices");
@@ -881,8 +866,6 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
 		i++;
 	}
 	assert(i == jrows->item_count);
-	if (evp_ctx)
-		EVP_MD_CTX_destroy(evp_ctx);
 	return &dcfg->decomp;
 
  err_enomem:
@@ -890,80 +873,117 @@ decomp_static_config(ldmsd_strgp_t strgp, json_entity_t jcfg,
  err_0:
 	decomp_static_cfg_free(dcfg);
 	free(col_id_tbl);
-	if (evp_ctx)
-		EVP_MD_CTX_destroy(evp_ctx);
 	return NULL;
 }
 
-static int decomp_static_resolve_mid(decomp_static_mid_rbn_t mid_rbn,
-				       decomp_static_row_cfg_t cfg_row,
-				       ldms_set_t set)
+static int resolve_metrics(ldmsd_strgp_t strgp,
+			decomp_static_mid_rbn_t mid_rbn,
+			decomp_static_row_cfg_t cfg_row,
+			ldms_set_t set)
 {
-	int i, mid;
+	EVP_MD_CTX *evp_ctx = NULL;
+	int col_no, mid;
 	size_t mval_offset = 0;
 	ldms_mval_t lh, le, rec_array, rec;
-	size_t mlen;
+	size_t mlen = -1;
 	const char *src;
 	enum ldms_value_type mtype;
-	for (i = 0; i < mid_rbn->col_count; i++) {
-		mid_rbn->col_mids[i].mid = -1;
-		mid_rbn->col_mids[i].rec_mid = -1;
 
-		src = cfg_row->cols[i].src;
+	evp_ctx = EVP_MD_CTX_create();
+	if (!evp_ctx) {
+		ovis_log(mylog, OVIS_LERROR, "out of memory\n");
+		goto err;
+	}
+	EVP_DigestInit_ex(evp_ctx, EVP_sha256(), NULL);
+
+	mid_rbn->col_count = cfg_row->col_count;
+	for (col_no = 0; col_no < mid_rbn->col_count; col_no++) {
+		mid_rbn->col_mids[col_no].mid = -1;
+		mid_rbn->col_mids[col_no].rec_mid = -1;
+		mid_rbn->col_mids[col_no].array_len = -1;
+		mid_rbn->col_mids[col_no].rec_mid = -EINVAL;
+		mid_rbn->col_mids[col_no].rec_mtype = LDMS_V_NONE;
+
+		src = cfg_row->cols[col_no].src;
 
 		if (0 == strcmp(src, "timestamp")) {
-			mid_rbn->col_mids[i].mid = LDMSD_PHONY_METRIC_ID_TIMESTAMP;
-			mid_rbn->col_mids[i].mtype = LDMS_V_TIMESTAMP;
-			mid_rbn->col_mids[i].mval_offset = mval_offset;
-			mid_rbn->col_mids[i].mval_size =
-				ldms_metric_value_size_get(mid_rbn->col_mids[i].mtype, 0);
-			mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[i].mval_size, sizeof(uint64_t));
-			continue;
+			mid_rbn->col_mids[col_no].mid = LDMSD_PHONY_METRIC_ID_TIMESTAMP;
+			mid_rbn->col_mids[col_no].mval_offset = mval_offset;
+			mid_rbn->col_mids[col_no].mtype = LDMS_V_TIMESTAMP;
+			mid_rbn->col_mids[col_no].mval_size =
+				ldms_metric_value_size_get(LDMS_V_TIMESTAMP, 0);
+			mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[col_no].mval_size,
+						sizeof(uint64_t));
+			goto next;
 		}
 
 		if (0 == strcmp(src, "producer")) {
-			mid_rbn->col_mids[i].mid = LDMSD_PHONY_METRIC_ID_PRODUCER;
-			mid_rbn->col_mids[i].rec_mtype = LDMS_V_CHAR_ARRAY;
-			continue;
+			mid_rbn->col_mids[col_no].mid = LDMSD_PHONY_METRIC_ID_PRODUCER;
+			cfg_row->cols[col_no].type = LDMS_V_CHAR_ARRAY;
+			/* Doesn't consume mval space, data comes from
+			 * producer name in set meta-data */
+			goto next;
 		}
 
 		if (0 == strcmp(src, "instance")) {
-			mid_rbn->col_mids[i].mid = LDMSD_PHONY_METRIC_ID_INSTANCE;
-			mid_rbn->col_mids[i].rec_mtype = LDMS_V_CHAR_ARRAY;
-			continue;
+			mid_rbn->col_mids[col_no].mid = LDMSD_PHONY_METRIC_ID_INSTANCE;
+			cfg_row->cols[col_no].type = LDMS_V_CHAR_ARRAY;
+			/* Doesn't consume mval space, data comes from
+			 * instance name in set meta-data */
+			goto next;
 		}
 
-		mid = ldms_metric_by_name(set, cfg_row->cols[i].src);
-		mid_rbn->col_mids[i].mid = mid;
-		if (mid < 0) /* OK to not exist */
-			continue;
+		mid = ldms_metric_by_name(set, cfg_row->cols[col_no].src);
+		mid_rbn->col_mids[col_no].mid = mid;
+		if (mid < 0) { /* OK to not exist if type is specified */
+			if (cfg_row->cols[col_no].type) {
+				if (cfg_row->cols[col_no].array_len < 0) {
+					ovis_log(mylog, OVIS_LERROR,
+						"strgp '%s': col[dst] '%s' "
+						"array must have a len specified if it "
+						"does not exist in the set.\n",
+						strgp->obj.name,
+						cfg_row->cols[col_no].dst);
+					goto err;
+				}
+				/* Metric does not exist, but it has a type and if needed
+				 * an array length so the EVP context can be computed */
+				goto next;
+			}
+			ovis_log(mylog, OVIS_LERROR,
+				"strgp '%s': col[src] '%s' "
+				"does not exist in the set and the 'type' is not "
+				"specified.\n",
+				strgp->obj.name, cfg_row->cols[col_no].src);
+			goto err;
+		}
+
 		mtype = ldms_metric_type_get(set, mid);
-		mid_rbn->col_mids[i].mtype = mtype;
+		mid_rbn->col_mids[col_no].mtype = mtype;
+		mlen = ldms_metric_array_get_len(set, mid);
+		mid_rbn->col_mids[col_no].array_len = mlen;
+
 		if (mtype == LDMS_V_LIST)
 			goto list_routine;
 		if (mtype == LDMS_V_RECORD_ARRAY)
 			goto rec_array_routine;
 
 		/* primitives & array of primitives */
-		mid_rbn->col_mids[i].mval_offset = mval_offset;
-		if (!ldms_type_is_array(mtype))
-			mid_rbn->col_mids[i].mval_size =
-				ldms_metric_value_size_get(mtype, 0);
-		else
-			mid_rbn->col_mids[i].mval_size =
-				ldms_metric_value_size_get(mtype,
-					ldms_metric_array_get_len(set, mid));
-		mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[i].mval_size, sizeof(uint64_t));
+		mid_rbn->col_mids[col_no].mval_offset = mval_offset;
+		mid_rbn->col_mids[col_no].mval_size = ldms_metric_value_size_get(mtype, mlen);
+		mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[col_no].mval_size, sizeof(uint64_t));
 
 		if (mtype > LDMS_V_D64_ARRAY) {
 			/* Invalid type */
-			mid_rbn->col_mids[i].mid = -EINVAL;
-			continue;
+			ovis_log(mylog, OVIS_LERROR,
+				"strgp '%s': col[src] '%s' "
+				"the metric type %d is not supported.\n",
+				strgp->obj.name, cfg_row->cols[col_no].src,
+				mtype
+				);
+			goto err;
 		}
-		/* This is not a record */
-		mid_rbn->col_mids[i].rec_mid = -EINVAL;
-		mid_rbn->col_mids[i].rec_mtype = LDMS_V_NONE;
-		continue;
+		goto next;
 
 	list_routine:
 		/* handling LIST */
@@ -971,67 +991,83 @@ static int decomp_static_resolve_mid(decomp_static_mid_rbn_t mid_rbn,
 		le = ldms_list_first(set, lh, &mtype, &mlen);
 		if (!le) {
 			/* list empty. can't init yet */
-			mid_rbn->col_mids[i].rec_mid = -1;
-			continue;
+			goto err;
 		}
 		if (mtype == LDMS_V_LIST) {
 			/* LIST of LIST is not supported */
-			mid_rbn->col_mids[i].rec_mid = -EINVAL;
-			mid_rbn->col_mids[i].rec_mtype = LDMS_V_NONE;
-			continue;
+			/* Invalid type */
+			ovis_log(mylog, OVIS_LERROR,
+				"strgp '%s': row '%d': col[dst] '%s' "
+				"LIST of LIST is not supported.\n",
+				strgp->obj.name, col_no, cfg_row->cols[col_no].dst
+				);
+			goto err;
 		}
-		if (!cfg_row->cols[i].rec_member) {
-			/* expect LIST of non-record elements */
-			mid_rbn->col_mids[i].rec_mid = -EINVAL;
-			mid_rbn->col_mids[i].rec_mtype = LDMS_V_NONE;
-			continue;
+		if (!cfg_row->cols[col_no].rec_member) {
+			/* LIST of non-record elements */
+			goto next;
 		}
-		/* handling LIST of records */
-		mid = ldms_record_metric_find(le, cfg_row->cols[i].rec_member);
-		mid_rbn->col_mids[i].rec_mid = mid;
+		/* LIST of records */
+		mid = ldms_record_metric_find(le, cfg_row->cols[col_no].rec_member);
+		mid_rbn->col_mids[col_no].rec_mid = mid;
 		if (mid >= 0) {
 			mtype = ldms_record_metric_type_get(le, mid, &mlen);
-			mid_rbn->col_mids[i].rec_mtype = mtype;
-			mid_rbn->col_mids[i].mval_offset = mval_offset;
-			mid_rbn->col_mids[i].mval_size =
+			mid_rbn->col_mids[col_no].rec_mtype = mtype;
+			mid_rbn->col_mids[col_no].mval_offset = mval_offset;
+			mid_rbn->col_mids[col_no].mval_size =
 				ldms_metric_value_size_get(mtype, mlen);
-			mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[i].mval_size, sizeof(uint64_t));
+			mval_offset +=
+				LDMS_ROUNDUP(mid_rbn->col_mids[col_no].mval_size,
+						sizeof(uint64_t));
 		}
-		continue;
+		goto next;
 
 	rec_array_routine:
 		rec_array = ldms_metric_get(set, mid);
 		rec = ldms_record_array_get_inst(rec_array, 0);
-		if (!cfg_row->cols[i].rec_member) {
-			mid_rbn->col_mids[i].rec_mid = -EINVAL;
-			mid_rbn->col_mids[i].rec_mtype = LDMS_V_NONE;
-			continue;
+		if (!cfg_row->cols[col_no].rec_member) {
+			ovis_log(mylog, OVIS_LERROR,
+				"strgp '%s': row '%d': the record array '%s' "
+				"is emptyd.\n",
+				strgp->obj.name, col_no, cfg_row->cols[col_no].src);
+			goto err;
 		}
-		mid = ldms_record_metric_find(rec, cfg_row->cols[i].rec_member);
+		mid = ldms_record_metric_find(rec, cfg_row->cols[col_no].rec_member);
 		if (mid < 0) {
-			mid_rbn->col_mids[i].rec_mid = -ENOENT;
-			mid_rbn->col_mids[i].rec_mtype = LDMS_V_NONE;
-			continue;
+			ovis_log(mylog, OVIS_LERROR,
+				"strgp '%s': row '%d': col[dst] '%s' "
+				"Missing record member definition.n",
+				strgp->obj.name, col_no, cfg_row->cols[col_no].dst);
+			goto next;
 		}
 		mtype = ldms_record_metric_type_get(rec, mid, &mlen);
-		mid_rbn->col_mids[i].rec_mid = mid;
-		mid_rbn->col_mids[i].rec_mtype = mtype;
+		mid_rbn->col_mids[col_no].rec_mid = mid;
+		mid_rbn->col_mids[col_no].rec_mtype = mtype;
 		mtype = ldms_record_metric_type_get(le, mid, &mlen);
-		mid_rbn->col_mids[i].rec_mtype = mtype;
-		mid_rbn->col_mids[i].mval_offset = mval_offset;
-		if (!ldms_type_is_array(mtype))
-			mid_rbn->col_mids[i].mval_size =
-				ldms_metric_value_size_get(mtype, 0);
-		else
-			mid_rbn->col_mids[i].mval_size =
-				ldms_metric_value_size_get(mtype,
-					ldms_metric_array_get_len(set, mid));
-		mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[i].mval_size, sizeof(uint64_t));
-		continue;
+		mid_rbn->col_mids[col_no].rec_mtype = mtype;
+		mid_rbn->col_mids[col_no].mval_offset = mval_offset;
+		mid_rbn->col_mids[col_no].mval_size =
+			ldms_metric_value_size_get(mtype,
+				ldms_metric_array_get_len(set, mid));
+		mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[col_no].mval_size,
+					sizeof(uint64_t));
+next:
+		/* update row schema digest */
+		EVP_DigestUpdate(evp_ctx, cfg_row->cols[col_no].dst,
+			strlen(cfg_row->cols[col_no].dst));
+		EVP_DigestUpdate(evp_ctx, &cfg_row->cols[col_no].type,
+					sizeof(cfg_row->cols[col_no].type));
 	}
 	cfg_row->mval_size = mval_offset;
-
+	/* Finalize row schema digest */
+	unsigned int len = LDMS_DIGEST_LENGTH;
+	EVP_DigestFinal(evp_ctx, cfg_row->schema_digest.digest, &len);
 	return 0;
+err:
+	EVP_MD_CTX_destroy(evp_ctx);
+	if (errno)
+		return errno;
+	return EINVAL;
 }
 
 static ldmsd_row_t
@@ -1548,7 +1584,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 		int rec_array_len;
 		int rec_array_idx;
 	} *col_mvals = NULL, *mcol;
-	decomp_static_mid_rbn_t mid_rbn;
+	decomp_static_mid_rbn_t mid_rbn = NULL;
 	ldms_digest_t ldms_digest;
 	TAILQ_HEAD(, _list_entry) list_cols;
 	int row_more_le;
@@ -1592,13 +1628,12 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			rc = ENOMEM;
 			goto err_0;
 		}
-		memcpy(&mid_rbn->ldms_digest, ldms_digest, sizeof(*ldms_digest));
-		rbn_init(&mid_rbn->rbn, &mid_rbn->ldms_digest);
-		mid_rbn->col_count = cfg_row->col_count;
-		rbt_ins(&cfg_row->mid_rbt, &mid_rbn->rbn);
-		rc = decomp_static_resolve_mid(mid_rbn, cfg_row, set);
+		rc = resolve_metrics(strgp, mid_rbn, cfg_row, set);
 		if (rc)
 			goto err_0;
+		memcpy(&mid_rbn->ldms_digest, ldms_digest, sizeof(*ldms_digest));
+		rbn_init(&mid_rbn->rbn, &mid_rbn->ldms_digest);
+		rbt_ins(&cfg_row->mid_rbt, &mid_rbn->rbn);
 	make_col_mvals:
 		/* col_mvals is a temporary scratch paper to create rows from
 		 * a set with records. col_mvals is freed at the end of
@@ -1659,11 +1694,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			if (mtype > LDMS_V_D64_ARRAY)
 				goto col_mvals_fill;
 			/* primitives */
-			if (ldms_type_is_array(mtype)) {
-				mlen = ldms_metric_array_get_len(set, mid);
-			} else {
-				mlen = 1;
-			}
+			mlen = ldms_metric_array_get_len(set, mid);
 			mcol->mval = mval;
 			mcol->mtype = mtype;
 			mcol->array_len = mlen;
@@ -1725,7 +1756,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 		col_mvals_fill:
 			mcol->le = NULL;
 			mcol->mval = cfg_row->cols[j].fill;
-			mcol->mtype = cfg_row->cols[j].type;
+			mcol->mtype = row->cols[j].type;
 			mcol->array_len = cfg_row->cols[j].fill_len;
 		}
 
@@ -1763,18 +1794,6 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			cfg_col = &cfg_row->cols[j];
 			mcol = &col_mvals[j];
 
-			if (cfg_col->type != mcol->mtype) {
-				ldmsd_lerror("strgp '%s': row '%d' col[dst] '%s': "
-					     "the value type (%s) is not "
-					     "compatible with the source metric type (%s). "
-					     "Please check the decomposition configuration.\n",
-					     strgp->obj.name, i, cfg_col->dst,
-					     ldms_metric_type_to_str(cfg_col->type),
-					     ldms_metric_type_to_str(mcol->mtype));
-				rc = EINVAL;
-				goto err_0;
-			}
-
 			col->metric_id = mcol->metric_id;
 			col->rec_metric_id = mcol->rec_metric_id;
 
@@ -1786,17 +1805,19 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			else
 				assign_value(col->mval, mcol->mval, mcol->mtype, mcol->array_len);
 
-			if (!mcol->le) /* no more elements */
+			if (!mcol->le)	   		/* No more list elements */
 				continue;
 
-			if (mcol->rec_array_idx >= 0) /* array of recorp ds */
+			if (mcol->rec_array_idx >= 0)	/* Array of records */
 				goto col_rec_array;
 
 			/* list */
 			/* step to next element in the list */
 			mcol->le = ldms_list_next(set, mcol->le, &mcol->mtype, &mcol->array_len);
 			if (!mcol->le)
+				/* Fill remaining list elements with default */
 				goto col_fill;
+
 			row_more_le = 1;
 			if (cfg_row->cols[j].rec_member) {
 				/* expect record */
@@ -1831,7 +1852,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 
 		col_fill:
 			mcol->mval = cfg_row->cols[j].fill;
-			mcol->array_len = cfg_row->cols[j].array_len;
+			mcol->array_len = row->cols[j].array_len;
 			mcol->mtype = cfg_row->cols[j].type;
 		}
 
@@ -1847,7 +1868,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 
 			/* Initialize the metric types in the key values */
 			for (i = 0; i < cfg_row->group_count; i++) {
-				keys[i].type = cfg_row->cols[cfg_row->group_cols[i]].type;
+				keys[i].type = row->cols[cfg_row->group_cols[i]].type;
 				keys[i].val = *row->cols[cfg_row->group_cols[i]].mval;
 				keys[i].count = row->cols[cfg_row->group_cols[i]].array_len;
 			}
@@ -1858,7 +1879,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 
 			/* Initialize the metric types in the key values */
 			for (i = 0; i < cfg_row->row_order_count; i++) {
-				keys[i].type = cfg_row->cols[cfg_row->row_order_cols[i]].type;
+				keys[i].type = row->cols[cfg_row->row_order_cols[i]].type;
 				keys[i].val = *row->cols[cfg_row->row_order_cols[i]].mval;
 				keys[i].count = row->cols[cfg_row->row_order_cols[i]].array_len;
 			}
@@ -1905,8 +1926,8 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 	return 0;
  err_0:
 	/* clean up stuff here */
-	if (col_mvals)
-		free(col_mvals);
+	free(col_mvals);
+	free(mid_rbn);
 	decomp_static_release_rows(strgp, row_list);
 	return rc;
 }
