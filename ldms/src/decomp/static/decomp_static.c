@@ -1592,13 +1592,13 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			rc = ENOMEM;
 			goto err_0;
 		}
-		memcpy(&mid_rbn->ldms_digest, ldms_digest, sizeof(*ldms_digest));
-		rbn_init(&mid_rbn->rbn, &mid_rbn->ldms_digest);
 		mid_rbn->col_count = cfg_row->col_count;
-		rbt_ins(&cfg_row->mid_rbt, &mid_rbn->rbn);
 		rc = decomp_static_resolve_mid(mid_rbn, cfg_row, set);
 		if (rc)
 			goto err_0;
+		memcpy(&mid_rbn->ldms_digest, ldms_digest, sizeof(*ldms_digest));
+		rbn_init(&mid_rbn->rbn, &mid_rbn->ldms_digest);
+		rbt_ins(&cfg_row->mid_rbt, &mid_rbn->rbn);
 	make_col_mvals:
 		/* col_mvals is a temporary scratch paper to create rows from
 		 * a set with records. col_mvals is freed at the end of
