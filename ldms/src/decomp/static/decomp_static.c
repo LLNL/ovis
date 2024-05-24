@@ -1192,7 +1192,8 @@ static int none_op(ldmsd_row_list_t row_list, ldmsd_row_t dest_row, int col_id)
 	ldmsd_row_t src_row = TAILQ_FIRST(row_list);
 	ldmsd_col_t src_col = &src_row->cols[col_id];
 	ldmsd_col_t dst_col = &dest_row->cols[col_id];
-	*dst_col->mval = *src_col->mval;
+	assign_value(dst_col->mval, src_col->mval,
+			dst_col->type, dst_col->array_len);
 	return 0;
 }
 
