@@ -596,6 +596,7 @@ typedef enum ldmsd_phony_metric_id {
 	LDMSD_PHONY_METRIC_ID_TIMESTAMP = LDMSD_PHONY_METRIC_ID_FIRST,
 	LDMSD_PHONY_METRIC_ID_PRODUCER,
 	LDMSD_PHONY_METRIC_ID_INSTANCE,
+	LDMSD_PHONY_METRIC_ID_FILL
 } ldmsd_phony_metric_id_t;
 
 __attribute__((unused)) /* compiler hush */

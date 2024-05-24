@@ -908,8 +908,8 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 
 		if (0 == strcmp(src, "timestamp")) {
 			mid_rbn->col_mids[col_no].mid = LDMSD_PHONY_METRIC_ID_TIMESTAMP;
-			mid_rbn->col_mids[col_no].mval_offset = mval_offset;
 			mid_rbn->col_mids[col_no].mtype = LDMS_V_TIMESTAMP;
+			mid_rbn->col_mids[col_no].mval_offset = mval_offset;
 			mid_rbn->col_mids[col_no].mval_size =
 				ldms_metric_value_size_get(LDMS_V_TIMESTAMP, 0);
 			mval_offset += LDMS_ROUNDUP(mid_rbn->col_mids[col_no].mval_size,
@@ -921,7 +921,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 			mid_rbn->col_mids[col_no].mid = LDMSD_PHONY_METRIC_ID_PRODUCER;
 			cfg_row->cols[col_no].type = LDMS_V_CHAR_ARRAY;
 			/* Doesn't consume mval space, data comes from
-			 * producer name in set meta-data */
+			 * instance name in set meta-data */
 			goto next;
 		}
 
@@ -935,19 +935,28 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 
 		mid = ldms_metric_by_name(set, cfg_row->cols[col_no].src);
 		mid_rbn->col_mids[col_no].mid = mid;
-		if (mid < 0) { /* OK to not exist if type is specified */
+		if (mid < 0) {
+			/* This is a fill candidate, must have a type and if
+			 * an array a length */
 			if (cfg_row->cols[col_no].type) {
-				if (cfg_row->cols[col_no].array_len < 0) {
-					ovis_log(mylog, OVIS_LERROR,
-						"strgp '%s': col[dst] '%s' "
-						"array must have a len specified if it "
-						"does not exist in the set.\n",
-						strgp->obj.name,
-						cfg_row->cols[col_no].dst);
-					goto err;
+				if (ldms_type_is_array(cfg_row->cols[col_no].type)) {
+					if (cfg_row->cols[col_no].array_len < 0) {
+						ovis_log(mylog, OVIS_LERROR,
+							"strgp '%s': col[dst] '%s' "
+							"array must have a len specified if it "
+							"does not exist in the set.\n",
+							strgp->obj.name,
+							cfg_row->cols[col_no].dst);
+						goto err;
+					}
 				}
 				/* Metric does not exist, but it has a type and if needed
-				 * an array length so the EVP context can be computed */
+				 * an array length */
+				mid_rbn->col_mids[col_no].mid = LDMSD_PHONY_METRIC_ID_FILL;
+				mtype  = cfg_row->cols[col_no].type;
+				mlen = cfg_row->cols[col_no].array_len;
+				mid_rbn->col_mids[col_no].mtype = mtype;
+				mid_rbn->col_mids[col_no].array_len = mlen;
 				goto next;
 			}
 			ovis_log(mylog, OVIS_LERROR,
@@ -1103,6 +1112,7 @@ row_cache_dup(decomp_static_row_cfg_t cfg_row,
 		idx = (void*)&idx->cols[idx->col_count];
 	}
 	dup_row->mvals = (uint8_t *)idx;
+	memcpy(dup_row->mvals, row->mvals, cfg_row->mval_size);
 	for (i = 0; i < row->col_count; i++) {
 		dup_row->cols[i].name = row->cols[i].name;
 		dup_row->cols[i].column = row->cols[i].column;
@@ -1110,7 +1120,16 @@ row_cache_dup(decomp_static_row_cfg_t cfg_row,
 		dup_row->cols[i].array_len = row->cols[i].array_len;
 		dup_row->cols[i].metric_id = row->cols[i].metric_id;
 		dup_row->cols[i].rec_metric_id = row->cols[i].rec_metric_id;
-		dup_row->cols[i].mval = (ldms_mval_t)&dup_row->mvals[mid_rbn->col_mids[i].mval_offset];
+		switch (dup_row->cols[i].metric_id) {
+		case LDMSD_PHONY_METRIC_ID_PRODUCER:
+		case LDMSD_PHONY_METRIC_ID_INSTANCE:
+		case LDMSD_PHONY_METRIC_ID_FILL:
+			dup_row->cols[i].mval = row->cols[i].mval;
+			break;
+		case LDMSD_PHONY_METRIC_ID_TIMESTAMP:
+		default:
+			dup_row->cols[i].mval = (ldms_mval_t)&dup_row->mvals[mid_rbn->col_mids[i].mval_offset];
+		}
 	}
  out:
 	return dup_row;
@@ -1619,25 +1638,28 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 		 * schema. The schema is identified by the LDMS schema digest.
 		 */
 		mid_rbn = (void*)rbt_find(&cfg_row->mid_rbt, ldms_digest);
-		if (mid_rbn) /* metric IDs have already been resolved for this LDMS schema */
-			goto make_col_mvals;
-		/* Resolving `src` -> metric ID */
-		mid_rbn = calloc(1, sizeof(*mid_rbn) +
-				    cfg_row->col_count * sizeof(mid_rbn->col_mids[0]));
 		if (!mid_rbn) {
-			rc = ENOMEM;
-			goto err_0;
+			/* Resove the metric data for this new schema */
+			/* Resolving `src` -> metric ID */
+			mid_rbn = calloc(1, sizeof(*mid_rbn) +
+					cfg_row->col_count * sizeof(mid_rbn->col_mids[0]));
+			if (!mid_rbn) {
+				rc = ENOMEM;
+				goto err_0;
+			}
+			rc = resolve_metrics(strgp, mid_rbn, cfg_row, set);
+			if (rc)
+				goto err_0;
+			memcpy(&mid_rbn->ldms_digest, ldms_digest, sizeof(*ldms_digest));
+			rbn_init(&mid_rbn->rbn, &mid_rbn->ldms_digest);
+			rbt_ins(&cfg_row->mid_rbt, &mid_rbn->rbn);
 		}
-		rc = resolve_metrics(strgp, mid_rbn, cfg_row, set);
-		if (rc)
-			goto err_0;
-		memcpy(&mid_rbn->ldms_digest, ldms_digest, sizeof(*ldms_digest));
-		rbn_init(&mid_rbn->rbn, &mid_rbn->ldms_digest);
-		rbt_ins(&cfg_row->mid_rbt, &mid_rbn->rbn);
-	make_col_mvals:
-		/* col_mvals is a temporary scratch paper to create rows from
+
+		/*
+		 * col_mvals is a scratch memory to create rows from
 		 * a set with records. col_mvals is freed at the end of
-		 * `make_row`. */
+		 * `make_row`.
+		 */
 		col_mvals = calloc(1, cfg_row->col_count * sizeof(*col_mvals));
 		if (!col_mvals) {
 			rc = ENOMEM;
@@ -1646,8 +1668,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 		for (j = 0; j < cfg_row->col_count; j++) {
 			mid = mid_rbn->col_mids[j].mid;
 			mcol = &col_mvals[j];
-			if (mid < 0) /* metric not existed in the set */
-				goto col_mvals_fill;
+			assert(mid >= 0);
 			mcol->metric_id = mid;
 			mcol->rec_metric_id = -1;
 			mcol->rec_array_idx = -1;
@@ -1656,22 +1677,25 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			case LDMSD_PHONY_METRIC_ID_TIMESTAMP:
 				/* mcol->mval will be assigned in `make_row` */
 				mcol->mtype = LDMS_V_TIMESTAMP;
-				mcol->array_len = 1;
-				mcol->le = NULL;
 				continue;
 			case LDMSD_PHONY_METRIC_ID_PRODUCER:
 				mcol->mval = (ldms_mval_t)producer;
 				/* mcol->mval->a_char is producer */
 				mcol->mtype = LDMS_V_CHAR_ARRAY;
 				mcol->array_len = producer_len;
-				mcol->le = NULL;
 				continue;
 			case LDMSD_PHONY_METRIC_ID_INSTANCE:
 				mcol->mval = (ldms_mval_t)instance;
 				/* mcol->mval->a_char is instance */
 				mcol->mtype = LDMS_V_CHAR_ARRAY;
 				mcol->array_len = instance_len;
-				mcol->le = NULL;
+				continue;
+			case LDMSD_PHONY_METRIC_ID_FILL:
+				mcol->mval = (ldms_mval_t)instance;
+				/* mcol->mval->a_char is instance */
+				mcol->mtype = cfg_row->cols[j].type;
+				mcol->array_len = cfg_row->cols[j].array_len;
+				mcol->mval = cfg_row->cols[j].fill;
 				continue;
 			}
 			mval = ldms_metric_get(set, mid);
@@ -1756,7 +1780,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 		col_mvals_fill:
 			mcol->le = NULL;
 			mcol->mval = cfg_row->cols[j].fill;
-			mcol->mtype = row->cols[j].type;
+			mcol->mtype = cfg_row->cols[j].type;
 			mcol->array_len = cfg_row->cols[j].fill_len;
 		}
 
@@ -1796,20 +1820,35 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 
 			col->metric_id = mcol->metric_id;
 			col->rec_metric_id = mcol->rec_metric_id;
-
 			col->name = cfg_col->dst;
 			col->type = mcol->mtype;
 			col->array_len = mcol->array_len;
-			if (mid_rbn->col_mids[j].mid == LDMSD_PHONY_METRIC_ID_TIMESTAMP)
-				col->mval->v_ts = ts;
-			else
-				assign_value(col->mval, mcol->mval, mcol->mtype, mcol->array_len);
 
-			if (!mcol->le)	   		/* No more list elements */
-				continue;
+			switch (mid_rbn->col_mids[j].mid) {
+			case LDMSD_PHONY_METRIC_ID_TIMESTAMP:
+				col->mval->v_ts = ts;
+				break;
+			case LDMSD_PHONY_METRIC_ID_PRODUCER:
+				col->mval = (ldms_mval_t)producer;
+				col->array_len = producer_len;
+				break;
+			case LDMSD_PHONY_METRIC_ID_INSTANCE:
+				col->mval = (ldms_mval_t)instance;
+				col->array_len = instance_len;
+				break;
+			case LDMSD_PHONY_METRIC_ID_FILL:
+				col->mval = cfg_col->fill;
+				col->array_len = cfg_col->fill_len;
+				break;
+			default:
+				assign_value(col->mval, mcol->mval, mcol->mtype, mcol->array_len);
+			}
 
 			if (mcol->rec_array_idx >= 0)	/* Array of records */
 				goto col_rec_array;
+
+			if (!mcol->le)			/* No more list elements */
+				continue;
 
 			/* list */
 			/* step to next element in the list */
@@ -1867,10 +1906,10 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			group_idx = ldmsd_row_cache_idx_create(cfg_row->group_count, keys);
 
 			/* Initialize the metric types in the key values */
-			for (i = 0; i < cfg_row->group_count; i++) {
-				keys[i].type = row->cols[cfg_row->group_cols[i]].type;
-				keys[i].val = *row->cols[cfg_row->group_cols[i]].mval;
-				keys[i].count = row->cols[cfg_row->group_cols[i]].array_len;
+			for (j = 0; j < cfg_row->group_count; j++) {
+				keys[j].type = row->cols[cfg_row->group_cols[j]].type;
+				keys[j].val = *row->cols[cfg_row->group_cols[j]].mval;
+				keys[j].count = row->cols[cfg_row->group_cols[j]].array_len;
 			}
 
 			/* Build the row-order key */
@@ -1878,10 +1917,10 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			row_idx = ldmsd_row_cache_idx_create(cfg_row->row_order_count, keys);
 
 			/* Initialize the metric types in the key values */
-			for (i = 0; i < cfg_row->row_order_count; i++) {
-				keys[i].type = row->cols[cfg_row->row_order_cols[i]].type;
-				keys[i].val = *row->cols[cfg_row->row_order_cols[i]].mval;
-				keys[i].count = row->cols[cfg_row->row_order_cols[i]].array_len;
+			for (j = 0; j < cfg_row->row_order_count; j++) {
+				keys[j].type = row->cols[cfg_row->row_order_cols[j]].type;
+				keys[j].val = *row->cols[cfg_row->row_order_cols[j]].mval;
+				keys[j].count = row->cols[cfg_row->row_order_cols[j]].array_len;
 			}
 
 			/* Cache the current, unmodified row */
@@ -1895,7 +1934,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			dup_row = row_cache_dup(cfg_row, mid_rbn, row);
 
 			/* Apply functional operators to columns */
-			for (i = 0; i < row->col_count; i++) {
+			for (j = 0; j < row->col_count; j++) {
 				struct ldmsd_row_list_s row_list;
 				int count = ldmsd_row_cache_make_list(
 						&row_list,
@@ -1910,8 +1949,8 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 						strgp->obj.name, cfg_col->op_name,
 						cfg_col->dst);
 
-				cfg_col = &cfg_row->cols[i];
-				rc = op_table[cfg_col->op](&row_list, dup_row, i);
+				cfg_col = &cfg_row->cols[j];
+				rc = op_table[cfg_col->op](&row_list, dup_row, j);
 			}
 			row = dup_row;
 		}
