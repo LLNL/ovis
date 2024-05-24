@@ -1000,6 +1000,12 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 		le = ldms_list_first(set, lh, &mtype, &mlen);
 		if (!le) {
 			/* list empty. can't init yet */
+			ovis_log(mylog, OVIS_LERROR,
+				"strgp '%s': row '%d': col[dst] '%s' "
+				"LIST is empty, skipping set metric resolution.\n",
+				strgp->obj.name, col_no, cfg_row->cols[col_no].dst
+				);
+			errno = ENOENT;
 			goto err;
 		}
 		if (mtype == LDMS_V_LIST) {
