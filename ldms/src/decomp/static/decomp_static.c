@@ -891,7 +891,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 
 	evp_ctx = EVP_MD_CTX_create();
 	if (!evp_ctx) {
-		ovis_log(mylog, OVIS_LERROR, "out of memory\n");
+		ldmsd_log(LDMSD_LERROR, "out of memory\n");
 		goto err;
 	}
 	EVP_DigestInit_ex(evp_ctx, EVP_sha256(), NULL);
@@ -941,7 +941,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 			if (cfg_row->cols[col_no].type) {
 				if (ldms_type_is_array(cfg_row->cols[col_no].type)) {
 					if (cfg_row->cols[col_no].array_len < 0) {
-						ovis_log(mylog, OVIS_LERROR,
+						ldmsd_log(LDMSD_LERROR,
 							"strgp '%s': col[dst] '%s' "
 							"array must have a len specified if it "
 							"does not exist in the set.\n",
@@ -959,7 +959,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 				mid_rbn->col_mids[col_no].array_len = mlen;
 				goto next;
 			}
-			ovis_log(mylog, OVIS_LERROR,
+			ldmsd_log(LDMSD_LERROR,
 				"strgp '%s': col[src] '%s' "
 				"does not exist in the set and the 'type' is not "
 				"specified.\n",
@@ -984,7 +984,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 
 		if (mtype > LDMS_V_D64_ARRAY) {
 			/* Invalid type */
-			ovis_log(mylog, OVIS_LERROR,
+			ldmsd_log(LDMSD_LERROR,
 				"strgp '%s': col[src] '%s' "
 				"the metric type %d is not supported.\n",
 				strgp->obj.name, cfg_row->cols[col_no].src,
@@ -1005,7 +1005,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 		if (mtype == LDMS_V_LIST) {
 			/* LIST of LIST is not supported */
 			/* Invalid type */
-			ovis_log(mylog, OVIS_LERROR,
+			ldmsd_log(LDMSD_LERROR,
 				"strgp '%s': row '%d': col[dst] '%s' "
 				"LIST of LIST is not supported.\n",
 				strgp->obj.name, col_no, cfg_row->cols[col_no].dst
@@ -1035,7 +1035,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 		rec_array = ldms_metric_get(set, mid);
 		rec = ldms_record_array_get_inst(rec_array, 0);
 		if (!cfg_row->cols[col_no].rec_member) {
-			ovis_log(mylog, OVIS_LERROR,
+			ldmsd_log(LDMSD_LERROR,
 				"strgp '%s': row '%d': the record array '%s' "
 				"is emptyd.\n",
 				strgp->obj.name, col_no, cfg_row->cols[col_no].src);
@@ -1043,7 +1043,7 @@ static int resolve_metrics(ldmsd_strgp_t strgp,
 		}
 		mid = ldms_record_metric_find(rec, cfg_row->cols[col_no].rec_member);
 		if (mid < 0) {
-			ovis_log(mylog, OVIS_LERROR,
+			ldmsd_log(LDMSD_LERROR,
 				"strgp '%s': row '%d': col[dst] '%s' "
 				"Missing record member definition.n",
 				strgp->obj.name, col_no, cfg_row->cols[col_no].dst);
@@ -1942,7 +1942,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 						strgp->row_cache,
 						group_idx);
 				if (count != cfg_row->group_count)
-					ovis_log(mylog, OVIS_LWARN,
+					ldmsd_log(LDMSD_LWARNING,
 						"strgp '%s': insufficent rows in "
 						"cache to satisfy functional operator '%s' "
 						"on column '%s'.\n",

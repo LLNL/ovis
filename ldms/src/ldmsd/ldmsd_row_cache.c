@@ -2,6 +2,7 @@
  * See COPYING at the top of the source tree for the license
 */
 
+#include <assert.h>
 #include "ldmsd.h"
 
 /*
