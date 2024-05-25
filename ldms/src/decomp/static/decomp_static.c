@@ -1834,21 +1834,22 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			switch (mid_rbn->col_mids[j].mid) {
 			case LDMSD_PHONY_METRIC_ID_TIMESTAMP:
 				col->mval->v_ts = ts;
-				break;
+				continue;
 			case LDMSD_PHONY_METRIC_ID_PRODUCER:
 				col->mval = (ldms_mval_t)producer;
 				col->array_len = producer_len;
-				break;
+				continue;
 			case LDMSD_PHONY_METRIC_ID_INSTANCE:
 				col->mval = (ldms_mval_t)instance;
 				col->array_len = instance_len;
-				break;
+				continue;
 			case LDMSD_PHONY_METRIC_ID_FILL:
 				col->mval = cfg_col->fill;
 				col->array_len = cfg_col->fill_len;
-				break;
+				continue;
 			default:
 				assign_value(col->mval, mcol->mval, mcol->mtype, mcol->array_len);
+				break;
 			}
 
 			if (mcol->rec_array_idx >= 0)	/* Array of records */
