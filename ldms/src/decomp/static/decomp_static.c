@@ -472,6 +472,11 @@ static int handle_group(
 			rc = EINVAL;
 			goto err_0;
 		}
+                ldmsd_log(LDMSD_LDEBUG,
+                          "strgp '%s': row '%d': "
+                          "index name %s, index column %d, at dst column %d\n",
+                          strgp->obj.name, row_no,
+                          json_string_value(jidx), col_no, cfg_row->group_cols[col_no]);
 	}
 
 	jidxs = json_object_get(jgroup, "order");
