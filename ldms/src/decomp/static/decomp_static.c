@@ -1794,12 +1794,12 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 						cfg_row->row_limit,
 						strgp->row_cache,
 						group_idx);
-				if (count != cfg_row->group_count)
+				if (count != cfg_row->row_limit)
 					ldmsd_log(LDMSD_LWARNING,
-						"strgp '%s': insufficient rows in "
+						"strgp '%s': insufficient rows (%d of %d) in "
 						"cache to satisfy functional operator '%s' "
 						"on column '%s'.\n",
-                                                strgp->obj.name,
+                                                strgp->obj.name, count, cfg_row->row_limit,
                                                 ldmsd_decomp_op_to_string(cfg_col->op),
 						cfg_col->dst);
 				cfg_col = &cfg_row->cols[j];
