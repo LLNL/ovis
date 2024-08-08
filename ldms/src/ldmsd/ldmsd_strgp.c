@@ -185,6 +185,12 @@ static void strgp_decompose(ldmsd_strgp_t strgp, ldmsd_prdcr_set_t prd_set)
 		ldmsd_log(LDMSD_LERROR, "strgp decompose error: %d\n", rc);
 		return;
 	}
+        ldmsd_log(LDMSD_LDEBUG,
+                  "strgp_decompose(): decompose returned %d rows from "
+                  "schema '%s', instance '%s'\n",
+                  row_count,
+                  prd_set->schema_name,
+                  prd_set->inst_name);
 	rc = strgp->store->commit(strgp, prd_set->set, &row_list, row_count);
 	if (rc) {
 		ldmsd_log(LDMSD_LERROR, "strgp row commit error: %d\n", rc);
