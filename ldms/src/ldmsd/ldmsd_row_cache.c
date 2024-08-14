@@ -2,6 +2,7 @@
  * See COPYING at the top of the source tree for the license
 */
 
+#include <stdbool.h>
 #include <inttypes.h>
 #include <assert.h>
 #include "ldmsd.h"
@@ -314,6 +315,12 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 {
 	ldmsd_row_group_t group;
 	struct rbn *group_rbn;
+        int group_count_before;
+        int group_count_after;
+        int row_count_before;
+        int row_count_after;
+        bool group_preexisted = true;
+        bool row_delete = false;
 
 	/* Insert the row_list into the tree using rcache->row_key */
 	ldmsd_row_cache_entry_t entry = calloc(1, sizeof(*entry));
@@ -322,9 +329,11 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 
 	pthread_mutex_lock(&rcache->lock);
 
-	/* Look up the group */
+        /* Look up the group */
+        group_count_before = rbt_card(&rcache->group_tree);
 	group_rbn = rbt_find(&rcache->group_tree, group_key);
 	if (!group_rbn) {
+                group_preexisted = false;
 		/* Create a new group and add it to the tree */
 		group = calloc(1, sizeof(*group));
 		group->row_key_count = row_key->key_count;
@@ -334,12 +343,15 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 		rbt_ins(&rcache->group_tree, &group->rbn);
 		group_rbn = &group->rbn;
 	}
+        group_count_after = rbt_card(&rcache->group_tree);
 
 	group = container_of(group_rbn, struct ldmsd_row_group_s, rbn);
 
+        row_count_before = rbt_card(&group->row_tree);
 	if (rbt_card(&group->row_tree) == rcache->row_limit) {
 		ldmsd_row_cache_entry_t cent;
 		struct rbn *rbn;
+                row_delete = true;
 		rbn = rbt_min(&group->row_tree);
 		cent = container_of(rbn, struct ldmsd_row_cache_entry_s, rbn);
 		rbt_del(&group->row_tree, rbn);
@@ -352,8 +364,15 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 	entry->row = row;
 	entry->idx = row_key;
 	rbt_ins(&group->row_tree, &entry->rbn);
+        row_count_after = rbt_card(&group->row_tree);
 	pthread_mutex_unlock(&rcache->lock);
 
+        ldmsd_log(LDMSD_LDEBUG, "ldmsd_row_cache(): group %s, group count before=%d, after=%d, "
+                  "row count before=%d, after=%d%s\n",
+                  group_preexisted ? "preexisted" : "created",
+                  group_count_before, group_count_after,
+                  row_count_before, row_count_after,
+                  row_delete ? ", cached row deleted" : "");
 	return 0;
 }
 
