@@ -1761,6 +1761,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 					keys[j]->mval_size);
 			}
 			group_idx = ldmsd_row_cache_idx_create(cfg_row->group_count, keys);
+                        ldmsd_row_cache_idx_debug("group", group_idx);
 
 			/* Build the row-order key */
 			keys = calloc(cfg_row->row_order_count, sizeof(*keys));
@@ -1775,6 +1776,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 					row->cols[cfg_row->row_order_cols[j]].mval,
 					keys[j]->mval_size);
 			}
+                        ldmsd_row_cache_idx_debug("row", row_idx);
 
 			/* Cache the current, unmodified row */
 			rc = ldmsd_row_cache(strgp->row_cache, group_idx, row_idx, row);

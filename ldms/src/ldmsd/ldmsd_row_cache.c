@@ -2,6 +2,7 @@
  * See COPYING at the top of the source tree for the license
 */
 
+#include <inttypes.h>
 #include <assert.h>
 #include "ldmsd.h"
 
@@ -225,6 +226,71 @@ err_1:
 err_0:
 	free(dup_idx);
 	return NULL;
+}
+
+static int ldmsd_row_cache_key_debug(char *buf, int buf_size, ldmsd_row_cache_key_t key)
+{
+        int count;
+
+	switch (key->type) {
+	case LDMS_V_U8:
+		return snprintf(buf, buf_size, "%"PRIu8, key->mval->v_u8);
+	case LDMS_V_S8:
+		return snprintf(buf, buf_size, "%"PRId8, key->mval->v_s8);
+	case LDMS_V_U16:
+		return snprintf(buf, buf_size, "%"PRIu16, key->mval->v_u16);
+	case LDMS_V_S16:
+		return snprintf(buf, buf_size, "%"PRId16, key->mval->v_s16);
+	case LDMS_V_U32:
+		return snprintf(buf, buf_size, "%"PRIu32, key->mval->v_u32);
+	case LDMS_V_S32:
+		return snprintf(buf, buf_size, "%"PRId32, key->mval->v_s32);
+	case LDMS_V_U64:
+		return snprintf(buf, buf_size, "%llu", key->mval->v_u64);
+		break;
+	case LDMS_V_S64:
+		return snprintf(buf, buf_size, "%lld", key->mval->v_s64);
+	case LDMS_V_F32:
+		return snprintf(buf, buf_size, "%f", key->mval->v_f);
+	case LDMS_V_D64:
+		return snprintf(buf, buf_size, "%f", key->mval->v_d);
+	case LDMS_V_TIMESTAMP:
+                return snprintf(buf, buf_size, "%"PRIu32".%"PRIu32,
+                                key->mval->a_ts->sec, key->mval->a_ts->usec);
+        case LDMS_V_CHAR_ARRAY:
+                count = key->count <= buf_size-1 ? key->count : buf_size - 1;
+                memcpy(buf, key->mval->a_char, count);
+                buf[count-1] = '\0';
+                return strlen(buf);
+	default:
+                return 0;
+	}
+}
+
+void ldmsd_row_cache_idx_debug(const char *name, const ldmsd_row_cache_idx_t idx)
+{
+        int i;
+        char buf[1024];
+        char *ptr = buf;
+        int size = 1024;
+        int used;
+
+        buf[0] = '\0';
+        for (i = 0; i < idx->key_count; i++) {
+                ldmsd_row_cache_key_t key = idx->keys[i];
+                if (i != 0) {
+                        used = snprintf(ptr, size, ", ");
+                        ptr += used;
+                        size -= used;
+                }
+                used = ldmsd_row_cache_key_debug(ptr, size, key);
+                ptr += used;
+                size -= used;
+        }
+        ldmsd_log(LDMSD_LDEBUG, "%s cache_idx key_count: %d, keys: %s\n",
+                  name, idx->key_count, buf);
+
+        return;
 }
 
 void ldmsd_row_cache_key_free(ldmsd_row_cache_key_t key)

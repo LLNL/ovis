@@ -471,6 +471,7 @@ int ldmsd_row_cache(ldmsd_row_cache_t rcache,
 ldmsd_row_t ldmsd_row_dup(ldmsd_row_t);
 int ldmsd_row_cache_make_list(ldmsd_row_list_t row_list, int row_count,
 	ldmsd_row_cache_t cache, ldmsd_row_cache_idx_t group_key);
+void ldmsd_row_cache_idx_debug(const char *name, const ldmsd_row_cache_idx_t idx);
 
 typedef void (*strgp_update_fn_t)(ldmsd_strgp_t strgp, ldmsd_prdcr_set_t prd_set);
 struct ldmsd_strgp {
