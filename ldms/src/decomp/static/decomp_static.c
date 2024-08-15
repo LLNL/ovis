@@ -1799,13 +1799,12 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 			dup_row = row_cache_dup(cfg_row, mid_rbn, row);
 
 			/* Apply functional operators to columns */
+                        struct ldmsd_row_list_s tmp_row_list;
+                        int count = ldmsd_row_cache_make_list(&tmp_row_list,
+                                                              cfg_row->row_limit,
+                                                              strgp->row_cache,
+                                                              group_idx);
 			for (j = 0; j < row->col_count; j++) {
-				struct ldmsd_row_list_s tmp_row_list;
-				int count = ldmsd_row_cache_make_list(
-						&tmp_row_list,
-						cfg_row->row_limit,
-						strgp->row_cache,
-						group_idx);
 				if (count != cfg_row->row_limit)
 					ldmsd_log(LDMSD_LWARNING,
 						"strgp '%s': insufficient rows (%d of %d) in "
