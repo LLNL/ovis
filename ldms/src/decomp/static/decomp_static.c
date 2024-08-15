@@ -1800,9 +1800,9 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
 
 			/* Apply functional operators to columns */
 			for (j = 0; j < row->col_count; j++) {
-				struct ldmsd_row_list_s row_list;
+				struct ldmsd_row_list_s tmp_row_list;
 				int count = ldmsd_row_cache_make_list(
-						&row_list,
+						&tmp_row_list,
 						cfg_row->row_limit,
 						strgp->row_cache,
 						group_idx);
@@ -1815,7 +1815,7 @@ static int decomp_static_decompose(ldmsd_strgp_t strgp, ldms_set_t set,
                                                 ldmsd_decomp_op_to_string(cfg_col->op),
 						cfg_col->dst);
 				cfg_col = &cfg_row->cols[j];
-				rc = op_table[cfg_col->op](&row_list, dup_row, j);
+				rc = op_table[cfg_col->op](&tmp_row_list, dup_row, j);
 			}
 			ldmsd_row_cache_idx_free(group_idx);
 			row = dup_row;

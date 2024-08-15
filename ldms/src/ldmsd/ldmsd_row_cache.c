@@ -43,6 +43,7 @@ static int tree_comparator(void *a, const void *b)
 	ldmsd_row_cache_idx_t key_a = (ldmsd_row_cache_idx_t)a;
 	ldmsd_row_cache_idx_t key_b = (ldmsd_row_cache_idx_t)b;
 	ldmsd_row_cache_key_t rowk_a, rowk_b;
+        int rc;
 	for (i = 0; i < key_a->key_count; i++) {
 		rowk_a = key_a->keys[i];
 		rowk_b = key_b->keys[i];
@@ -58,9 +59,14 @@ static int tree_comparator(void *a, const void *b)
 				return 1;
 			return 0;
 		case LDMS_V_CHAR_ARRAY:
-			return strncmp(rowk_a->mval->a_char, rowk_b->mval->a_char,
-				       rowk_a->count);
+			rc = strncmp(rowk_a->mval->a_char, rowk_b->mval->a_char,
+                                     rowk_a->count);
+                        ldmsd_log(LDMSD_LDEBUG, "tree_comparator() LDMS_V_CHAR_ARRAY: rc=%d, '%s' vs '%s', count=%d\n",
+                                  rc, rowk_a->mval->a_char, rowk_b->mval->a_char, rowk_a->count);
+                        return rc;
 		case LDMS_V_CHAR:
+                        ldmsd_log(LDMSD_LDEBUG, "tree_comparator() LDMS_V_CHAR: %c, %c\n",
+                                  rowk_a->mval->v_char, rowk_b->mval->v_char);
 			if (rowk_a->mval->v_char == rowk_b->mval->v_char)
 				continue;
 			if (rowk_a->mval->v_char > rowk_b->mval->v_char)
