@@ -1145,6 +1145,7 @@ ldms/scripts/envldms.sh
 ldms/man/Makefile
 rpm/ovis-ldms-toss3.spec
 rpm/ovis-ldms-toss4.spec
+rpm/ovis-ldms-toss5.spec
 ] )
 
 AC_CONFIG_FILES([

@@ -1,0 +1,390 @@
+# Declare rpmbuild --with/--without parameters
+%bcond_without slurm
+%bcond_without python
+%bcond_without papi
+%bcond_without infiniband
+%bcond_without dcgm
+%bcond_without rdc
+%bcond_without kafka
+%bcond_without slingshot
+%bcond_without genders
+%bcond_without rabbitkw
+%bcond_without ibnet
+%bcond_without tests
+%bcond_without avrokafka
+%bcond_without zfs
+%bcond_without jansson
+%bcond_without variorum
+
+%ifarch ppc64le
+  %undefine with_slurm
+  %undefine with_rdc
+  %undefine with_slingshot
+  %undefine with_avrokafka
+  %undefine with_kafka
+  %undefine with_variorum
+%endif
+%ifarch aarch64
+  %undefine with_rdc
+  %undefine with_slingshot
+  %undefine with_avrokafka
+  %undefine with_kafka
+  %undefine with_variorum
+%endif
+
+%global tarball_version @VERSION@
+%global rocm_version 6.1.1
+
+%undefine _missing_build_ids_terminate_build
+# Because of the way we handle /opt in TOSS, we can not have a Requires
+# on things in /opt/rocm* (and that is where rdc_bootstrap.so is found).
+%global __requires_exclude ^librdc_bootstrap.*$
+
+# Main package
+Summary: OVIS Commands and Libraries
+Name: ovis-ldms
+Version: %(echo %{tarball_version} | tr '-' '_')
+Release: 1%{?dist}
+License: GPLv2 or BSD
+Group: System Environment/Libraries
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+Source: %{name}-%{tarball_version}.tar.gz
+Requires: rpm >= 4.8.0
+%if %{with python}
+Requires: python3
+%endif
+Requires: openssl
+Requires: boost-regex boost-program-options
+%if %{with genders}
+Requires: genders
+%endif
+Requires: libibmad libibumad
+Requires: librdmacm libibverbs
+Requires: munge
+%if %{with papi}
+Requires: papi
+Requires: libpfm
+%endif
+%if %{with infiniband}
+%ifnarch ppc64le
+# MOFED on ppc64le doesn't need the -devel package
+BuildRequires: infiniband-diags-devel
+%endif
+%if %{with slingshot}
+BuildRequires: cray-libcxi-devel
+BuildRequires: cray-cassini-headers-core
+BuildRequires: cray-cassini-headers-user
+# libcxi now requires the libnl3. the cray-libcxi-devel package will
+# incorporate this in the future.
+BuildRequires: libnl3-devel
+Requires: cray-libcxi
+%endif
+BuildRequires: rdma-core-devel
+BuildRequires: opensm-devel
+Requires: infiniband-diags-devel
+Requires: rdma-core-devel
+%endif
+BuildRequires: gcc
+BuildRequires: glib2-devel
+BuildRequires: openssl-devel
+BuildRequires: librdmacm-devel libibverbs-devel
+BuildRequires: libibmad libibmad-devel
+BuildRequires: libibumad libibumad-devel
+%if %{with ibnet}
+Requires: opensm-devel
+BuildRequires: opensm-devel
+%endif
+%if %{with python}
+BuildRequires: python3-devel
+BuildRequires: python3-Cython
+%endif
+BuildRequires: boost-devel
+%if %{with genders}
+BuildRequires: genders
+%endif
+BuildRequires: systemd
+BuildRequires: bison
+BuildRequires: flex
+BuildRequires: munge-devel
+%if %{with slurm}
+BuildRequires: slurm-devel
+%endif
+%if %{with papi}
+BuildRequires: papi
+BuildRequires: papi-devel
+BuildRequires: libpfm
+BuildRequires: libpfm-devel
+%endif
+%if %{with kafka}
+BuildRequires: librdkafka-devel
+Requires: librdkafka1
+%endif
+%if %{with avrokafka}
+BuildRequires: librdkafka-devel
+Requires: librdkafka1
+BuildRequires: confluent-libserdes-devel
+Requires: confluent-libserdes
+BuildRequires: avro-c-devel
+Requires: avro-c
+%endif
+%if %{with rabbitkw}
+Requires: librabbitmq
+BuildRequires: librabbitmq-devel
+%endif
+%if %{with zfs}
+Requires: libzfs5
+BuildRequires: libzfs5-devel
+%endif
+%if %{with jansson}
+Requires: jansson
+BuildRequires: jansson-devel
+%endif
+%if %{with variorum}
+Requires: variorum
+BuildRequires: variorum
+%endif
+
+Url: https://github.com/ovis-hpc/ovis
+
+%description
+This package provides the OVIS commands and libraries.
+
+%prep
+%setup -q -n %{name}-%{tarball_version}
+
+%build
+export CFLAGS="-g -O2 -fdiagnostics-color=auto %{optflags}"
+%configure \
+    CC=gcc CXX=g++ \
+    --disable-static \
+    --enable-nola \
+    --enable-munge \
+    --enable-ssl \
+    --enable-rdma \
+    --disable-mmap \
+    --disable-readline \
+    --disable-cray_power_sampler \
+    --disable-cray_system_sampler \
+    --disable-procdiskstats \
+    --disable-generic_sampler \
+    --enable-jobid \
+    --enable-ipmireader \
+    --enable-filesingle \
+    %{?with_genders:--enable-libgenders --enable-genderssystemd}%{!?with_genders:--disable-libgenders --disable-genderssystemd} \
+    %{?with_python:--enable-python}%{!?with_python:--disable-python} \
+    %{?with_slurm:--with-slurm}%{!?with_slurm:--without-slurm} \
+    %{?with_dcgm:--with-dcgm}%{!?with_dcgm:--without-dcgm} \
+    %{?with_infiniband:--enable-infiniband --enable-opa2}%{!?with_infiniband:--disable-infiniband --disable-opa2} \
+    %{?with_ibnet:--enable-ibnet}%{!?with_ibnet:--disable-ibnet} \
+    %{?with_rdc:--enable-rdc --with-librdc_bootstrap-prefix=/opt/rocm-%{rocm_version} --with-librdc_ras-prefix=/opt/rocm-%{rocm_version}/rdc}%{!?with_rdc:--disable-rdc} \
+    %{?with_kafka:--enable-kafka}%{!?with_kafka:--disable-kafka} \
+    %{?with_avrokafka:--enable-store-avro-kafka}%{!?with_avrokafka:--disable-store-avro-kafka} \
+    %{?with_slingshot:--enable-slingshot}%{!?with_slingshot:--disable-slingshot} \
+    %{?with_rabbitkw:--enable-rabbitkw}%{!?with_rabbitkw:--disable-rabbitkw} \
+    %{?with_zfs:--enable-zfs}%{!?with_zfs:--disable-zfs} \
+    %{?with_tests:--enable-slurmtest --enable-ldms-test}%{!?with_tests:--disable-slurmtest --disable-ldms-test} \
+    %{?with_variorum:--enable-variorum}%{!?with_variorum:--disable-variorum} \
+%if %{with papi}
+    --enable-papi \
+%endif
+    --disable-hello_stream # || cat config.log
+make V=1 -j 16
+
+%install
+rm -rf $RPM_BUILD_ROOT
+make DESTDIR=${RPM_BUILD_ROOT} V=1 install
+%if %{with genders}
+# only used by sysv init scripts
+rm -f ${RPM_BUILD_ROOT}%{_bindir}/ldmsd-pre-sysvinit
+# rearrange minimal ldms genders systemd init scripts support into needed locations
+GSRC=${RPM_BUILD_ROOT}%{_pkgdocdir}/sample_init_scripts/genders/systemd/etc/sysconfig/ldms.d
+GDEST=${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/ldms.d
+install -D ${GSRC}/README ${GDEST}/README
+install -D ${GSRC}/ClusterGenders/README ${GDEST}/ClusterGenders/README
+install -D ${GSRC}/ClusterSecrets/README ${GDEST}/ClusterSecrets/README
+install -D ${GSRC}/ClusterSecrets/ldmsauth.conf ${GDEST}/ClusterSecrets/ldmsauth.conf
+install -D ${GSRC}/ldms-functions ${GDEST}/ldms-functions
+install -D ${GSRC}/ldmsd ${GDEST}/ldmsd
+install -D ${GSRC}/plugins-conf/README ${GDEST}/plugins-conf/README
+install -D ${GSRC}/plugins-conf/init_jobinfo.sh ${GDEST}/plugins-conf/init_jobinfo.sh
+
+rm ${GSRC}/README
+rm ${GSRC}/ClusterGenders/README
+rm ${GSRC}/ClusterSecrets/README
+rm ${GSRC}/ClusterSecrets/ldmsauth.conf
+rm ${GSRC}/ldms-functions
+rm ${GSRC}/ldmsd
+rm ${GSRC}/plugins-conf/README
+rm ${GSRC}/plugins-conf/init_jobinfo.sh
+%endif
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files
+%defattr(-,root,root)
+%{_libdir}/*
+%{_bindir}/*
+%{_sbindir}/*
+%{_sbindir}/.ldms-wrapper
+%if %{with dcgm}
+%exclude %{_libdir}/*/*dcgm*
+%exclude %{_mandir}/*/*dcgm*
+%endif
+%if %{with rdc}
+%exclude %{_bindir}/ldms_rdc_schema_name
+%exclude %{_libdir}/*/*rdc_sampler*
+%exclude %{_mandir}/*/*_rdc_*
+%endif
+%exclude %{_bindir}/ldmsctl_args3
+%exclude %{_bindir}/ldmsd-pre-systemd
+%exclude %{_bindir}/ldmsd-wrapper.sh
+%exclude %{_sysconfdir}/sysconfig/*
+%if %{with tests}
+%exclude %{_bindir}/ldms-static-test.sh
+%exclude %{_pkgdocdir}/examples/static-test
+%exclude %{_mandir}/*/ldms-static-test*
+%exclude %{_bindir}/pll-ldms-static-test.sh
+%exclude %{_pkgdocdir}/examples/slurm-test
+%exclude %{_mandir}/*/pll-ldms-static-test*
+%exclude %{_libdir}/*/ldms-run-static-tests.test
+%exclude %{_libdir}/*/ldms-static-test-bypass
+%exclude %{_libdir}/*/ldms-static-test-list.sh
+%exclude %{_libdir}/*/libgrptest*
+%exclude %{_libdir}/*/libtest_sampler*
+%exclude %{_sbindir}/test_ldms*
+%exclude %{_sbindir}/ovis_json_perf_test
+%exclude %{_sbindir}/ovis_json_test
+%endif
+
+%package devel
+Summary: LDMS devel package
+Group: System Environment/Libraries
+Requires: %{name} = %{version}
+%description devel
+This is a development package of Lightweight Distributed Metric System (LDMS).
+Users who want to implement their own sampler or store must install this
+package.
+
+%files devel
+%defattr(-,root,root)
+%{_includedir}/*/*.h
+%{_includedir}/*/*/*.h
+%{_includedir}/ovis-ldms-config.h
+
+%if %{with genders}
+%package genders
+Summary: LDMS base initscripts for libgenders control of %{name}
+Group: System Environment/Libraries
+Requires: %{name} = %{version}
+Obsoletes: ovis-initscripts-base
+Obsoletes: ovis-initscripts-systemd
+Obsoletes: ovis-initscripts-sysv
+%description genders
+This is the support file set for libgenders based configuration of LDMS daemons.
+Users normally provide information via /etc/genders (or alternate file)
+%files genders
+%defattr(-,root,root)
+%{_bindir}/ldmsd-wrapper.sh
+%config %{_bindir}/ldmsd-pre-systemd
+%{_bindir}/ldmsctl_args3
+%doc %{_sysconfdir}/sysconfig/ldms.d/README
+%doc %{_sysconfdir}/sysconfig/ldms.d/ClusterGenders/README
+%doc %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/README
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/ClusterSecrets/ldmsauth.conf
+%config %{_sysconfdir}/sysconfig/ldms.d/ldms-functions
+%config %{_sysconfdir}/sysconfig/ldms.d/ldmsd
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/README
+%config(noreplace) %{_sysconfdir}/sysconfig/ldms.d/plugins-conf/init_jobinfo.sh
+%docdir %{_pkgdocdir}/sample_init_scripts
+%{_pkgdocdir}/sample_init_scripts
+%endif
+
+%package doc
+Summary: Documentation files for %{name}
+Group: System Environment/Libraries
+%description doc
+Doxygen files for ovis package.
+%files doc
+%defattr(-,root,root)
+%{_mandir}/*/*
+%{_pkgdocdir}
+%docdir %{_pkgdocdir}
+%exclude %{_pkgdocdir}/examples/slurm-test
+%exclude %{_pkgdocdir}/examples/static-test
+%exclude %{_pkgdocdir}/sample_init_scripts
+
+%if %{with python}
+%package python3
+Summary: Python files for LDMS
+Requires: %{name} >= %{version}
+Requires: python3
+%description python3
+Python files for ovis
+%files python3
+%defattr(-,root,root)
+%{_prefix}/lib/python*/site-packages/ovis_ldms
+%{_prefix}/lib/python*/site-packages/ldmsd
+%endif
+
+%if %{with dcgm}
+%package dcgm-sampler
+Summary: LDMS sampler plugin that supports Nvidia DCGM
+Group: System Environment/Base
+BuildRequires: datacenter-gpu-manager >= 1.7.2
+Requires: datacenter-gpu-manager >= 1.7.2
+%description dcgm-sampler
+LDMS sampler plugin that supports Nvidia DCGM
+%files dcgm-sampler
+%defattr(-,root,root,-)
+%{_libdir}/*/*dcgm*
+%{_mandir}/*/*dcgm*
+%endif
+
+%if %{with rdc}
+%package rdc-sampler
+Summary: LDMS sampler plugin that supports AMD GPUs
+Group: System Environment/Base
+BuildRequires: rocm-%{rocm_version}
+# Because of the way we handle /opt (where rocm is installed)
+# in TOSS, we can not have an explicit Requires on it here.
+#Requires: rocm-%{rocm_version}
+%description rdc-sampler
+LDMS sampler plugin that supports AMD GPUs
+%files rdc-sampler
+%defattr(-,root,root,-)
+%{_bindir}/ldms_rdc_schema_name
+%{_libdir}/*/*rdc_sampler*
+%{_mandir}/*/*_rdc_*
+%{_mandir}/*/*_rdc_*
+%endif
+
+%package test
+Summary: LDMS test package
+Group: System Environment/Libraries
+Requires: %{name} = %{version}
+%description test
+This is a collection of test scripts for (LDMS).
+%files test
+%defattr(-,root,root)
+%{_bindir}/ldms-py*sh
+%if %{with tests}
+%{_bindir}/pll-ldms-static-test.sh
+%{_pkgdocdir}/examples/slurm-test
+%{_pkgdocdir}/examples/static-test
+%{_mandir}/*/pll-ldms-static-test*
+%{_libdir}/*/ldms-run-static-tests.test
+%{_libdir}/*/ldms-static-test-bypass
+%{_libdir}/*/ldms-static-test-list.sh
+%{_libdir}/*/libgrptest*
+%{_libdir}/*/libtest_sampler*
+%{_sbindir}/test_ldms*
+%{_sbindir}/ovis_json_perf_test
+%{_sbindir}/ovis_json_test
+%endif
+
+%changelog
+* Tue Apr 9 2024 Benjamin A Allan <baallan@sandia.gov> 4.4.2
+Split out genders init proprocessor programs and example; move recent tests to tests package.
+* Mon May 11 2020 Christopher J. Morrone <morrone2@llnl.gov> 4.3.3-1
+New rpm packaging for TOSS.
